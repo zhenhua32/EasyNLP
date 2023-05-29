@@ -27,7 +27,13 @@ from .initializer import initialize_easynlp
 from .io_utils import IO, OSSIO, TFOSSIO, DefaultIO, io, parse_oss_buckets
 from .logger import init_logger
 
-easynlp_default_path = os.path.join(os.environ["HOME"], ".easynlp")
+# 修补下 HOME 目录, 如果不存在, 就在当前目录下创建
+default_home_dir = os.path.dirname(os.path.abspath(__file__))  # utils
+default_home_dir = os.path.dirname(default_home_dir)  # easynlp
+default_home_dir = os.path.dirname(default_home_dir)  # current project
+default_home_dir = os.path.join(default_home_dir, ".easynlp")
+os.makedirs(default_home_dir, exist_ok=True)
+easynlp_default_path = os.path.join(os.environ.get("HOME", default_home_dir), ".easynlp")
 EASYNLP_REMOTE_ROOT = "https://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/easynlp"
 EASYNLP_REMOTE_MODELZOO = "http://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/easynlp_modelzoo/"
 EASYNLP_CACHE_ROOT = os.getenv("EASYNLP_CACHE_ROOT", easynlp_default_path)
