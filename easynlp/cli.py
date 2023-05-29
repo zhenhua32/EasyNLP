@@ -18,12 +18,13 @@ import subprocess
 import sys
 from socket import socket
 
+sys.path.append('./')
+sys.path.append('../')
+
 from easynlp.utils import get_args, io
 from easynlp.utils.global_vars import set_variables_for_cli
 from easynlp.utils.initializer import init_oss_io
 
-sys.path.append('./')
-sys.path.append('../')
 
 def main():
     os.environ['PYTHONUNBUFFERED'] = '1'
