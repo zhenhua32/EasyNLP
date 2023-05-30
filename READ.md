@@ -22,6 +22,11 @@ python setup.py install
 [API文档](http://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/easynlp/easynlp_docs/html/index.html)
 
 阿里的文档也写的太烂了, 而且是面向 linux 的, 没有做 windows 适配.
+这文档看了跟没看一样.
+
+实用文档:
+
+- [ModelZoo列表](https://www.yuque.com/easyx/easynlp/cn0uh8)
 
 # 目录理解
 

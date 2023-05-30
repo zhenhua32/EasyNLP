@@ -167,3 +167,6 @@ examples/appzoo_tutorials/text_vision/clip_model/
 
 examples/appzoo_tutorials/machine_reading_comprehension/models/
 examples/appzoo_tutorials/machine_reading_comprehension/tmp/
+
+tmp/
+.easynlp/
