@@ -45,9 +45,11 @@ def parse_args(extra_args_provider=None, defaults={}, ignore_unknown_args=False)
     """
     parser = argparse.ArgumentParser(description="EasyNLP Arguments", allow_abbrev=False)
 
+    # 标准参数
     # Standard arguments.
     parser = _add_easynlp_args(parser)
 
+    # megatron 的参数
     try:
         # Add megatron arguments
         import deepspeed
@@ -62,24 +64,26 @@ def parse_args(extra_args_provider=None, defaults={}, ignore_unknown_args=False)
     except:
         pass
 
+    # 自定义参数解析
     # Custom arguments.
     if extra_args_provider is not None:
         parser = extra_args_provider(parser)
 
-    # Parse.
+    # Parse. 参数解析
     args, unparsed = parser.parse_known_args()
 
     print("The following parameters are not recognized:", unparsed)
 
-    # Distributed args.
+    # Distributed args. 分布式参数
     args.rank = int(os.getenv("RANK", "0"))
     args.world_size = int(os.getenv("WORLD_SIZE", "1"))
 
-    # Set input defaults.
+    # Set input defaults. 更新默认值
     for key in defaults:
         # For default to be valid, it should not be provided in the
         # arguments that are passed to the program. We check this by
         # ensuring the arg is set to None.
+        # 这种情况下不会更新. 那上面的注释写的是啥情况
         if getattr(args, key) is not None:
             if args.rank == 0:
                 print(
@@ -89,19 +93,23 @@ def parse_args(extra_args_provider=None, defaults={}, ignore_unknown_args=False)
                     flush=True,
                 )
         else:
+            # 更新默认值
             setattr(args, key, defaults[key])
 
+    # 下面都是参数检查
     assert args.mode is not None
 
     # Batch size.
     assert args.micro_batch_size is not None
     assert args.micro_batch_size > 0
 
+    # 是否读取 odps, 不知道 odps 是啥
     if args.tables is not None and "odps://" in args.tables:
         args.read_odps = True
     else:
         args.read_odps = False
 
+    # 分布式的参数
     args.n_gpu = args.worker_gpu if args.worker_gpu > 0 else 0
     if is_torchx_available():
         args.n_gpu = 0
