@@ -100,7 +100,8 @@ def _initialize_distributed():
 
     device_count = torch.cuda.device_count()
 
-    if device_count > 0:
+    # 原来用这个检查更好 torch.distributed.is_nccl_available()
+    if device_count > 0 and torch.distributed.is_nccl_available():
         args.distributed_backend = "nccl"
     else:
         args.distributed_backend = "gloo"
@@ -112,6 +113,7 @@ def _initialize_distributed():
         args.world_size = torch.distributed.get_world_size()
 
     else:
+        # 第二次导入的时候, 不应该到这里. TODO: 但是不同线程的时候会到这里
         if args.rank == 0:
             print("> initializing torch distributed ...", flush=True)
         # Manually set the device ids.
@@ -127,6 +129,10 @@ def _initialize_distributed():
         master_ip = os.getenv("MASTER_ADDR", "localhost")
         master_port = os.getenv("MASTER_PORT", "6000")
         init_method += master_ip + ":" + master_port
+        print(f"distributed_backend: {args.distributed_backend}")
+        print(f"init_method: {init_method}")
+        print(f"rank: {args.rank}")
+        print(f"world_size: {args.world_size}")
         torch.distributed.init_process_group(
             backend=args.distributed_backend, world_size=args.world_size, rank=args.rank, init_method=init_method
         )

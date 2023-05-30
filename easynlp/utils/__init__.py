@@ -20,6 +20,8 @@ from collections import defaultdict
 
 import torch
 import torch.nn as nn
+import requests
+from tqdm import tqdm
 
 from .arguments import is_torchx_available
 from .global_vars import get_args
@@ -31,7 +33,6 @@ from .logger import init_logger
 default_home_dir = os.path.dirname(os.path.abspath(__file__))  # utils
 default_home_dir = os.path.dirname(default_home_dir)  # easynlp
 default_home_dir = os.path.dirname(default_home_dir)  # current project
-default_home_dir = os.path.join(default_home_dir, ".easynlp")
 os.makedirs(default_home_dir, exist_ok=True)
 easynlp_default_path = os.path.join(os.environ.get("HOME", default_home_dir), ".easynlp")
 EASYNLP_REMOTE_ROOT = "https://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/easynlp"
@@ -110,9 +111,11 @@ def get_pretrain_model_path(pretrained_model_name_or_path,
         pretrained_model_name_or_path.strip() == '':
         return None
 
+    # 如果是本地路径, 直接返回
     if pretrained_model_name_or_path.startswith('./') or \
         pretrained_model_name_or_path.startswith('../') or \
         pretrained_model_name_or_path.startswith('/') or \
+        os.path.exists(pretrained_model_name_or_path) or \
         pretrained_model_name_or_path.startswith('oss://'):
         return pretrained_model_name_or_path
 
@@ -126,28 +129,17 @@ def get_pretrain_model_path(pretrained_model_name_or_path,
         io.makedirs(modelzoo_base_dir)
     assert io.isdir(modelzoo_base_dir
                     ), '%s is not a existing directory' % modelzoo_base_dir
-    if not io.exists(modelzoo_base_dir + 'modelzoo_alibaba.json'):
+    modelzoo_alibaba_json_file = os.path.join(modelzoo_base_dir, 'modelzoo_alibaba.json')
+    if not io.exists(modelzoo_alibaba_json_file):
         # Use the remote mapping file
-        """with urllib.request.urlopen("http://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/easynlp_modelzoo/modelzoo_alibaba.json") as f:
-
-        model_name_mapping = json.loads(f.read().decode('utf-8'))
-        """
-        while True:
-            try:
-                if os.path.exists('modelzoo_alibaba.json'):
-                    break
-                print('Trying downloading name_mapping.json')
-                os.system(
-                    'wget http://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/easynlp_modelzoo/modelzoo_alibaba.json'
-                )
-                print('Success')
-            except Exception:
-                time.sleep(2)
-
-        with open('modelzoo_alibaba.json') as f:
+        # 使用 requests 下载文件, 并保存到 modelzoo_base_dir 下
+        with requests.get("http://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/easynlp_modelzoo/modelzoo_alibaba.json") as resp:
+            with open(modelzoo_alibaba_json_file, 'wb') as f:
+                f.write(resp.content)
+        with open(modelzoo_alibaba_json_file) as f:
             model_name_mapping = json.loads(f.read())
     else:
-        with io.open(modelzoo_base_dir + 'modelzoo_alibaba.json') as f:
+        with io.open(modelzoo_alibaba_json_file) as f:
             model_name_mapping = json.load(f)
     if pretrained_model_name_or_path in model_name_mapping:
         pretrained_model_name = pretrained_model_name_or_path
@@ -174,12 +166,13 @@ def get_pretrain_model_path(pretrained_model_name_or_path,
                     if is_master_node:
                         print('Downloading `%s` to %s' %
                               (pretrained_model_name, local_tar_file_path))
-                        #print("Downloading `%s` to %s" % (remote_url, local_tar_file_path))
+                        print("Downloading `%s` to %s" % (remote_url, local_tar_file_path))
                         if not io.exists(get_dir_name(local_tar_file_path)):
                             io.makedirs(get_dir_name(local_tar_file_path))
 
-                        os.system('wget ' + remote_url + ' -P ' +
-                                  get_dir_name(local_tar_file_path))
+                        with requests.get(remote_url, stream=True) as resp:
+                            with open(local_tar_file_path, 'wb') as f:
+                                f.write(resp.content)
 
                         try:
                             tar = tarfile.open(local_tar_file_path, 'r:gz')
@@ -188,7 +181,7 @@ def get_pretrain_model_path(pretrained_model_name_or_path,
                             tar.extractall(
                                 get_dir_name(pretrained_model_name_or_path))
                             tar.close()
-                            os.system('rm -rf %s*' % local_tar_file_path)
+                            os.remove(local_tar_file_path)
                         except:
                             print('file %s not exists, deletion terminated.' % local_tar_file_path)
                             pass
