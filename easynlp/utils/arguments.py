@@ -41,6 +41,7 @@ def parse_args(extra_args_provider=None, defaults={}, ignore_unknown_args=False)
     """
     解析所有参数
     Parse all arguments.
+    TODO: 看一看所有的参数? 可能人都要看傻了
     """
     parser = argparse.ArgumentParser(description="EasyNLP Arguments", allow_abbrev=False)
 
@@ -186,6 +187,10 @@ def _check_arg_is_not_none(args, arg):
 
 
 def _add_easynlp_args(parser: argparse.ArgumentParser):
+    """
+    定义 easynlp 的标准参数
+    """
+    # 参数分组
     group = parser.add_argument_group(title="EasyNLP")
 
     group.add_argument(

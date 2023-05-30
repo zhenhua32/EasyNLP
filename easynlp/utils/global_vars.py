@@ -99,7 +99,10 @@ def build_num_microbatches_calculator(args):
 
 
 def get_args():
-    """Return arguments."""
+    """
+    获取所有的参数, 需要保证已经被初始化
+    Return arguments.
+    """
     _ensure_var_is_initialized(_GLOBAL_ARGS, "args")
     return _GLOBAL_ARGS
 
@@ -143,7 +146,10 @@ def set_global_variables(extra_args_provider=None, args_defaults={}, ignore_unkn
 
 
 def set_variables_for_cli(extra_args_provider=None, defaults={}, ignore_unknown_args=False):
-    """Parse entire arguments."""
+    """
+    同样是设置全局变量
+    Parse entire arguments.
+    """
     global _GLOBAL_ARGS
     _ensure_var_is_not_initialized(_GLOBAL_ARGS, "args")
 
