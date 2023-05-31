@@ -25,56 +25,76 @@ from ..application import Application
 
 
 class SequenceClassification(Application):
-
+    """
+    序列分类模型
+    """
     def __init__(self, pretrained_model_name_or_path=None, **kwargs):
         super().__init__()
 
-        if kwargs.get('from_config'):
+        # 使用多种方式初始化 config 和 backbone
+        if kwargs.get("from_config"):
             # for evaluation and prediction
-            self.config = kwargs.get('from_config')
+            self.config = kwargs.get("from_config")
             self.backbone = AutoModel.from_config(self.config)
-        elif kwargs.get('user_defined_parameters') is not None and \
-            "model_parameters" in kwargs.get('user_defined_parameters'):
+        elif kwargs.get("user_defined_parameters") is not None and "model_parameters" in kwargs.get(
+            "user_defined_parameters"
+        ):
             # for model random initialization
             self.config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-            user_defined_parameters = kwargs.get('user_defined_parameters')
+            user_defined_parameters = kwargs.get("user_defined_parameters")
             user_defined_parameters_dict = literal_eval(user_defined_parameters)
-            self.config.update(user_defined_parameters_dict['model_parameters'])
+            self.config.update(user_defined_parameters_dict["model_parameters"])
             self.backbone = AutoModel.from_config(self.config)
         else:
             # for pretrained model, initialize from the pretrained model
             self.config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
             self.backbone = AutoModel.from_pretrained(pretrained_model_name_or_path)
-        if 'num_labels' in kwargs:
-            self.config.num_labels = kwargs['num_labels']
+        
+        # 更新标签数
+        if "num_labels" in kwargs:
+            self.config.num_labels = kwargs["num_labels"]
+        # 定义分类层
         self.classifier = nn.Linear(self.config.hidden_size, self.config.num_labels)
         self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
         self.init_weights()
 
     def init_weights(self):
+        """
+        初始化权重, 这里只有分类层需要初始化
+        """
         self.classifier.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         self.classifier.bias.data.zero_()
 
     def forward(self, inputs):
+        """
+        前向传播. TODO: 输入是哪些未知
+        """
         outputs = self.backbone(**inputs)
+        # 模型的输出值是直接用属性获取的
         pooler_output = outputs.pooler_output
         hidden_states = outputs.hidden_states
         pooler_output = self.dropout(pooler_output)
         logits = self.classifier(pooler_output)
+        # 返回字典
         return {
-            'hidden': hidden_states,
-            'logits': logits,
-            'predictions': torch.argmax(logits, dim=-1),
-            'probabilities': torch.softmax(logits, dim=-1)
+            "hidden": hidden_states,
+            "logits": logits,
+            "predictions": torch.argmax(logits, dim=-1),
+            "probabilities": torch.softmax(logits, dim=-1),
         }
 
     def compute_loss(self, forward_outputs, label_ids, **kwargs):
-        logits = forward_outputs['logits']
-        return {'loss': losses.cross_entropy(logits, label_ids)}
+        """
+        计算损失
+        forward_outputs 就是 forward 方法的返回值
+        """
+        logits = forward_outputs["logits"]
+        return {"loss": losses.cross_entropy(logits, label_ids)}
 
 
 class DistillatorySequenceClassification(DistillatoryBaseApplication, SequenceClassification):
     pass
+
 
 class SequenceMultiLabelClassification(SequenceClassification):
     """
@@ -89,8 +109,10 @@ class SequenceMultiLabelClassification(SequenceClassification):
         logits = forward_outputs["logits"]
         return {"loss": losses.multi_label_sigmoid_cross_entropy(logits, label_ids)}
 
+
 class FewshotSequenceClassification(FewshotClassification):
     pass
+
 
 class CptFewshotSequenceClassification(CPTClassification):
     pass

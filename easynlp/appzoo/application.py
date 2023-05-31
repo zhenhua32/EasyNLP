@@ -24,45 +24,63 @@ from ..modelzoo.modeling_utils import print_init_keys_info
 
 
 class Application(nn.Module):
-
+    """
+    基础类, 代表一个任务
+    """
     def __init__(self):
         super().__init__()
-    
+
     def init_weights(self):
+        """
+        初始化权重
+        """
         raise NotImplementedError
 
     def forward(self, inputs):
+        """
+        前向传播
+        """
         raise NotImplementedError
 
     def compute_loss(self, forward_outputs, label_ids, **kwargs):
+        """
+        计算损失
+        """
         raise NotImplementedError
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        """
+        加载预训练模型
+        """
+        # 直接可以用
         # Instantiate model.
         if "modelzoo" in pretrained_model_name_or_path:
             return cls(pretrained_model_name_or_path)
 
+        # 加载配置, 应该就是 transformers 库的功能
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
         model = cls(from_config=config)
         state_dict = None
-        
+
+        # 加载权重
         weights_path = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")
         if not io.exists(weights_path):
             print_init_keys_info()
             return model
         with io.open(weights_path, "rb") as f:
-            state_dict = torch.load(f, map_location='cpu')
+            state_dict = torch.load(f, map_location="cpu")
 
+        # 参数命名转换
         # Load from a PyTorch state_dict
         old_keys = []
         new_keys = []
         for key in state_dict.keys():
             new_key = None
-            if 'gamma' in key:
-                new_key = key.replace('gamma', 'weight')
-            if 'beta' in key:
-                new_key = key.replace('beta', 'bias')
+            if "gamma" in key:
+                new_key = key.replace("gamma", "weight")
+            if "beta" in key:
+                new_key = key.replace("beta", "bias")
             if new_key:
                 old_keys.append(key)
                 new_keys.append(new_key)
@@ -72,28 +90,34 @@ class Application(nn.Module):
         missing_keys = []
         unexpected_keys = []
         error_msgs = []
+        # 复制一遍 state_dict
         # copy state_dict so _load_from_state_dict can modify it
-        metadata = getattr(state_dict, '_metadata', None)
+        metadata = getattr(state_dict, "_metadata", None)
         state_dict = state_dict.copy()
         if metadata is not None:
             state_dict._metadata = metadata
 
-        def load(module, prefix=''):
+        def load(module, prefix=""):
             local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-            module._load_from_state_dict(state_dict, prefix, local_metadata, True, missing_keys,
-                                         unexpected_keys, error_msgs)
+            # 调用模型内部的 _load_from_state_dict 方法
+            module._load_from_state_dict(
+                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs
+            )
             for name, child in module._modules.items():
+                # 递归调用子模型的加载
                 if child is not None:
-                    load(child, prefix + name + '.')
+                    load(child, prefix + name + ".")
 
-        start_prefix = ''
-        logger.info('Loading model...')
+        # 开始加载权重
+        start_prefix = ""
+        logger.info("Loading model...")
         load(model, prefix=start_prefix)
-        logger.info('Load finished!')
+        logger.info("Load finished!")
 
+        # 打印加载信息
         expected_keys = list(model.state_dict().keys())
         loaded_keys = list(state_dict.keys())
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
         print_init_keys_info(loaded_keys, expected_keys, unexpected_keys, missing_keys, error_msgs)
-        
+
         return model
