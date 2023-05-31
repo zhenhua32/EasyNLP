@@ -63,19 +63,35 @@ except Exception as err:
 
 
 class Predictor(object):
+    """
+    基础类, 定义预测器
+    """
+
     def __init__(self, *args, **kwargs):
         pass
 
     def run(self, in_data):
+        """
+        主函数, 整个预测流程
+        """
         return self.postprocess(self.predict(self.preprocess(in_data)))
 
     def preprocess(self, in_data):
+        """
+        预处理阶段
+        """
         raise NotImplementedError
 
     def predict(self, in_data):
+        """
+        预测阶段
+        """
         raise NotImplementedError
 
     def postprocess(self, result):
+        """
+        后处理阶段
+        """
         raise NotImplementedError
 
 
@@ -126,37 +142,47 @@ class TFModelPredictor(object):
 
 
 class PyModelPredictor(object):
+    """
+    这是 pytorch 版本的预测器, 不需要继承 Predictor
+    """
+
     def __init__(self, model_cls, saved_model_path, input_keys, output_keys):
-        self.model = model_cls.from_pretrained(
-            pretrained_model_name_or_path=saved_model_path)
+        # 加载模型
+        self.model = model_cls.from_pretrained(pretrained_model_name_or_path=saved_model_path)
         if torch.cuda.is_available():
             self.model = self.model.cuda()
         self.model.eval()
+        # 定义输入和输出字段
         self.input_keys = input_keys
         self.output_keys = output_keys
 
     def predict(self, in_data):
+        """
+        进行预测
+        """
+        # 构建输入字典
         in_tensor = dict()
         for key, tensor_type in self.input_keys:
             in_tensor[key] = tensor_type(in_data[key])
             if torch.cuda.is_available():
                 in_tensor[key] = in_tensor[key].cuda()
+
+        # 模型执行
         with torch.no_grad():
             predictions = self.model.forward(in_tensor)
+
+        # 最终输出
         ret = {}
+        # 保存输入
         for key, val in in_data.items():
             ret[key] = val
-
+        # 保存输出
         for key in self.output_keys:
             ret[key] = predictions[key].data.cpu().numpy()
         return ret
 
 
-def get_model_predictor(model_dir,
-                        input_keys,
-                        output_keys,
-                        model_cls=None,
-                        use_tf=None):
+def get_model_predictor(model_dir, input_keys, output_keys, model_cls=None, use_tf=None):
     """
     if use_tf is None:
         use_tf = io.exists(os.path.join(model_dir, 'saved_model.pb'))
@@ -172,22 +198,24 @@ def get_model_predictor(model_dir,
                                 input_keys=input_keys,
                                 output_keys=output_keys)
     """
-    return PyModelPredictor(model_cls=model_cls,
-                                saved_model_path=model_dir,
-                                input_keys=input_keys,
-                                output_keys=output_keys)
+    # 返回模型预测器
+    return PyModelPredictor(
+        model_cls=model_cls, saved_model_path=model_dir, input_keys=input_keys, output_keys=output_keys
+    )
 
 
 class SimplePredictorManager(object):
-    def __init__(self,
-                 predictor,
-                 input_file,
-                 input_schema,
-                 output_file,
-                 output_schema,
-                 append_cols,
-                 skip_first_line=False,
-                 batch_size=32):
+    def __init__(
+        self,
+        predictor,
+        input_file,
+        input_schema,
+        output_file,
+        output_schema,
+        append_cols,
+        skip_first_line=False,
+        batch_size=32,
+    ):
         self.predictor = predictor
         self.input_file = input_file
         self.output_file = output_file
@@ -200,13 +228,13 @@ class SimplePredictorManager(object):
                 f.readline()
             self.data_lines = f.readlines()
 
-        self.fout = io.open(output_file, 'w')
+        self.fout = io.open(output_file, "w")
 
     @staticmethod
     def get_batches(lst, k):
         total_batches = math.ceil(len(lst) / k)
         for i in range(total_batches):
-            yield lst[i * k:(i + 1) * k]
+            yield lst[i * k : (i + 1) * k]
 
     def run(self):
         for batch in tqdm(self.get_batches(self.data_lines, self.batch_size)):
@@ -217,15 +245,14 @@ class SimplePredictorManager(object):
 
             output_dict_list = self.predictor.run(input_dict_list)
 
-            for input_dict, output_dict in zip(input_dict_list,
-                                               output_dict_list):
+            for input_dict, output_dict in zip(input_dict_list, output_dict_list):
                 out_record = []
-                for colname in self.output_schema.split(','):
+                for colname in self.output_schema.split(","):
                     out_record.append(str(output_dict[colname]))
                 if self.append_cols:
-                    for colname in self.append_cols.split(','):
+                    for colname in self.append_cols.split(","):
                         out_record.append(str(input_dict[colname]))
-                self.fout.write('\t'.join(out_record) + '\n')
+                self.fout.write("\t".join(out_record) + "\n")
         self.fout.close()
 
 
@@ -491,19 +518,21 @@ class EasyPredictorManager(object):
 
 
 class PredictorManager(object):
-    def __init__(self,
-                 predictor,
-                 input_file,
-                 output_file,
-                 output_schema,
-                 append_cols,
-                 input_schema=None,
-                 skip_first_line=False,
-                 batch_size=32,
-                 queue_size=1024,
-                 slice_size=4096,
-                 thread_num=1,
-                 table_read_thread_num=16):
+    def __init__(
+        self,
+        predictor,
+        input_file,
+        output_file,
+        output_schema,
+        append_cols,
+        input_schema=None,
+        skip_first_line=False,
+        batch_size=32,
+        queue_size=1024,
+        slice_size=4096,
+        thread_num=1,
+        table_read_thread_num=16,
+    ):
         """
         if input_file.startswith('odps://'):
             assert USE_EASY_PREDICT, 'Predict ODPS need to `pip install easypredict` first'
@@ -528,9 +557,8 @@ class PredictorManager(object):
                 output_schema, append_cols, skip_first_line, batch_size)
         """
         self.predictor_manager = SimplePredictorManager(
-                predictor, input_file, input_schema, output_file,
-                output_schema, append_cols, skip_first_line, batch_size)
-
+            predictor, input_file, input_schema, output_file, output_schema, append_cols, skip_first_line, batch_size
+        )
 
     def run(self):
         self.predictor_manager.run()
