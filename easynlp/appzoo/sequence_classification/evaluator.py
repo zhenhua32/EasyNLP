@@ -28,9 +28,13 @@ from ...fewshot_learning.fewshot_evaluator import PromptEvaluator, CPTEvaluator
 
 
 class SequenceClassificationEvaluator(Evaluator):
+    """
+    序列分类模型的评估器
+    """
 
     def __init__(self, valid_dataset, **kwargs):
         super().__init__(valid_dataset, **kwargs)
+        # 定义评估指标
         self.metrics = ["accuracy", "f1"]
 
     def evaluate(self, model):
@@ -57,6 +61,7 @@ class SequenceClassificationEvaluator(Evaluator):
             except RuntimeError:
                 batch = {key: val for key, val in batch.items()}
 
+            # 进行推理
             infer_start_time = time.time()
             with torch.no_grad():
                 label_ids = batch.pop("label_ids")
@@ -69,6 +74,7 @@ class SequenceClassificationEvaluator(Evaluator):
 
             y_trues.extend(label_ids.tolist())
             logits_list.extend(logits.tolist())
+            # 记录正确值
             hit_num += torch.sum(torch.argmax(logits, dim=-1) == label_ids).item()
             total_num += label_ids.shape[0]
 
@@ -84,15 +90,22 @@ class SequenceClassificationEvaluator(Evaluator):
             total_samples += self.valid_loader.batch_size
             if (_step + 1) % 100 == 0:
                 logger.info(
-                    "Eval: %d/%d steps finished" %
-                    (_step + 1, len(self.valid_loader.dataset) // self.valid_loader.batch_size))
+                    "Eval: %d/%d steps finished"
+                    % (_step + 1, len(self.valid_loader.dataset) // self.valid_loader.batch_size)
+                )
 
-        logger.info("Inference time = {:.2f}s, [{:.4f} ms / sample] ".format(
-            total_spent_time, total_spent_time * 1000 / total_samples))
+        # 打印推理结果
+        logger.info(
+            "Inference time = {:.2f}s, [{:.4f} ms / sample] ".format(
+                total_spent_time, total_spent_time * 1000 / total_samples
+            )
+        )
 
+        # 计算评估损失
         eval_loss = total_loss / total_steps
         logger.info("Eval loss: {}".format(eval_loss))
 
+        # 计算评估指标
         logits_list = np.array(logits_list)
         eval_outputs = list()
         for metric in self.metrics:
@@ -130,8 +143,7 @@ class SequenceClassificationEvaluator(Evaluator):
                 logger.info("Peasrson_and_spearmanr: {}".format(corr))
                 eval_outputs.append(("pearson_and_spearman", corr))
             elif metric == "classification_report":
-                logger.info("\n{}".format(
-                    classification_report(y_trues, np.argmax(logits_list, axis=-1), digits=4)))
+                logger.info("\n{}".format(classification_report(y_trues, np.argmax(logits_list, axis=-1), digits=4)))
             elif "last_layer_mse" in self.metrics:
                 logger.info("Last layer MSE: {}".format(eval_loss))
                 eval_outputs.append(("last_layer_mse", -eval_loss))
@@ -167,10 +179,7 @@ class SequenceMultiLabelClassificationEvaluator(Evaluator):
         total_spent_time = 0.0
         for _step, batch in enumerate(self.valid_loader):
             try:
-                batch = {
-                    key: val.cuda() if isinstance(val, torch.Tensor) else val
-                    for key, val in batch.items()
-                }
+                batch = {key: val.cuda() if isinstance(val, torch.Tensor) else val for key, val in batch.items()}
             except RuntimeError:
                 batch = {key: val for key, val in batch.items()}
 
@@ -194,11 +203,15 @@ class SequenceMultiLabelClassificationEvaluator(Evaluator):
             total_samples += self.valid_loader.batch_size
             if (_step + 1) % 100 == 0:
                 logger.info(
-                    "Eval: %d/%d steps finished" %
-                    (_step + 1, len(self.valid_loader.dataset) // self.valid_loader.batch_size))
+                    "Eval: %d/%d steps finished"
+                    % (_step + 1, len(self.valid_loader.dataset) // self.valid_loader.batch_size)
+                )
 
-        logger.info("Inference time = {:.2f}s, [{:.4f} ms / sample] ".format(
-            total_spent_time, total_spent_time * 1000 / total_samples))
+        logger.info(
+            "Inference time = {:.2f}s, [{:.4f} ms / sample] ".format(
+                total_spent_time, total_spent_time * 1000 / total_samples
+            )
+        )
 
         eval_loss = total_loss / total_steps
         logger.info("Eval loss: {}".format(eval_loss))

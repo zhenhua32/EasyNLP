@@ -17,18 +17,30 @@ from torch.utils.data import DataLoader
 
 
 class Evaluator(object):
-    def __init__(self, valid_dataset, **kwargs):
-        eval_batch_size = kwargs.get('eval_batch_size', 32)
-        self.valid_loader = DataLoader(valid_dataset,
-                                       batch_size=eval_batch_size,
-                                       shuffle=False,
-                                       collate_fn=valid_dataset.batch_fn)
+    """
+    基础类, 用于定义评估器的基本功能
+    """
 
-        self.best_valid_score = float('-inf')
+    def __init__(self, valid_dataset, **kwargs):
+        """
+        定义 batch_size, valid_loader, best_valid_score
+        """
+        eval_batch_size = kwargs.get("eval_batch_size", 32)
+        self.valid_loader = DataLoader(
+            valid_dataset, batch_size=eval_batch_size, shuffle=False, collate_fn=valid_dataset.batch_fn
+        )
+
+        self.best_valid_score = float("-inf")
 
     def evaluate(self, model):
+        """
+        评估函数
+        """
         raise NotImplementedError
 
     @property
     def eval_metrics(self):
+        """
+        评估指标
+        """
         raise NotImplementedError
