@@ -110,6 +110,7 @@ def main():
         cmd.append("--master_port")
         cmd.append(str(random_available_port))
         dir_path = os.path.dirname(os.path.realpath(__file__))
+        # 这个就是入口文件
         cmd.append(os.path.join(dir_path, "appzoo/api.py"))
         cmd.append("--mode")
         cmd.append(args.mode)
