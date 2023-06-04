@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net" modified="2023-05-31T15:04:24.714Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36 Edg/113.0.1774.57" etag="RWeYrSKLAOd1H0Y8MxKT" version="21.3.5" type="github">
+<mxfile host="app.diagrams.net" modified="2023-06-04T03:01:48.719Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36 Edg/113.0.1774.57" etag="XWqkMuLDWwc-9fTMBStS" version="21.3.5" type="github">
   <diagram name="第 1 页" id="bjcYnBhxojHouhvNJA_J">
-    <mxGraphModel dx="990" dy="1837" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1577" dy="1837" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -59,7 +59,10 @@
         <mxCell id="iCXek3dMCppBJfNEmmiG-14" value="predict" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="290" y="440" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="iCXek3dMCppBJfNEmmiG-24" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="iCXek3dMCppBJfNEmmiG-15" target="iCXek3dMCppBJfNEmmiG-20">
+        <mxCell id="iCXek3dMCppBJfNEmmiG-30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="iCXek3dMCppBJfNEmmiG-15" target="iCXek3dMCppBJfNEmmiG-20">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="iCXek3dMCppBJfNEmmiG-31" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="iCXek3dMCppBJfNEmmiG-15" target="iCXek3dMCppBJfNEmmiG-29">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="iCXek3dMCppBJfNEmmiG-15" value="train" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
@@ -72,13 +75,31 @@
           <mxGeometry x="590" y="440" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="iCXek3dMCppBJfNEmmiG-20" value="Application" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="440" y="585" width="120" height="60" as="geometry" />
+          <mxGeometry x="330" y="580" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="iCXek3dMCppBJfNEmmiG-21" value="Evaluator" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="590" y="585" width="120" height="60" as="geometry" />
+          <mxGeometry x="740" y="580" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="iCXek3dMCppBJfNEmmiG-22" value="Predictor" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="280" y="585" width="120" height="60" as="geometry" />
+          <mxGeometry x="140" y="580" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="iCXek3dMCppBJfNEmmiG-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="iCXek3dMCppBJfNEmmiG-26" target="iCXek3dMCppBJfNEmmiG-27">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="iCXek3dMCppBJfNEmmiG-26" value="BaseDataset" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="330" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="iCXek3dMCppBJfNEmmiG-27" value="ClassificationDataset" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="490" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="iCXek3dMCppBJfNEmmiG-29" value="Trainer" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="580" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="iCXek3dMCppBJfNEmmiG-32" value="train 方法" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="200" y="770" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="iCXek3dMCppBJfNEmmiG-35" value="训练的过程中有多个钩子函数.&lt;br&gt;before_epoch&lt;br&gt;before_iter&lt;br&gt;after_iter&lt;br&gt;after_epoch&lt;br&gt;after_train" style="html=1;shadow=0;dashed=0;shape=mxgraph.bootstrap.rrect;rSize=5;strokeColor=#999999;strokeWidth=1;fillColor=#FFFFFF;fontColor=#000000;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=10;fontSize=14;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="414" y="720" width="296" height="140" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
