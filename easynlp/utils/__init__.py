@@ -82,6 +82,10 @@ def unbatch_dict_to_dict_list(lst_dict):
 
 
 def parse_row_by_schema(row: str, input_schema: str) -> dict:
+    """
+    构建 row_dict
+    input_schema=label:str:1,sid1:str:1,sid2:str:1,sent1:str:1,sent2:str:1
+    """
     row_dict = dict()
     for schema, content in zip(input_schema.split(','),
                                row.strip('\n').split('\t')):
@@ -94,11 +98,13 @@ def parse_row_by_schema(row: str, input_schema: str) -> dict:
             if col_length == 1:
                 row_dict[col_name] = int(content)
             else:
+                # 可以用逗号分隔的多个数字
                 row_dict[col_name] = list(map(int, content.split(',')))
         elif col_type == 'float':
             if col_length == 1:
                 row_dict[col_name] = float(content)
             else:
+                # 可以用逗号分隔的多个数字
                 row_dict[col_name] = list(map(float, content.split(',')))
         else:
             raise RuntimeError('Invalid schema: %s' % schema)

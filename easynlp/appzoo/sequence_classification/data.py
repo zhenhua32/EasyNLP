@@ -29,6 +29,7 @@ from ..dataset import BaseDataset
 class ClassificationDataset(BaseDataset):
     """
     Classification Dataset
+    分类数据集
 
     Args:
         pretrained_model_name_or_path: for init tokenizer.
@@ -39,44 +40,46 @@ class ClassificationDataset(BaseDataset):
         second_sequence: set as None
         label_enumerate_values: a list of label values
     """
-    def __init__(self,
-                 pretrained_model_name_or_path,
-                 data_file,
-                 max_seq_length,
-                 input_schema,
-                 first_sequence,
-                 label_name=None,
-                 second_sequence=None,
-                 label_enumerate_values=None,
-                 user_defined_parameters={},
-                 *args,
-                 **kwargs):
-        super().__init__(data_file,
-                         input_schema=input_schema,
-                         output_format="dict",
-                         *args,
-                         **kwargs)
 
-        self.kbert_model_prefix = True if 'kbert' in pretrained_model_name_or_path else False
-        self.kangaroo_model_prefix = True if 'kangaroo' in pretrained_model_name_or_path else False
+    def __init__(
+        self,
+        pretrained_model_name_or_path,
+        data_file,
+        max_seq_length,
+        input_schema,
+        first_sequence,
+        label_name=None,
+        second_sequence=None,
+        label_enumerate_values=None,
+        user_defined_parameters={},
+        *args,
+        **kwargs
+    ):
+        super().__init__(data_file, input_schema=input_schema, output_format="dict", *args, **kwargs)
 
+        self.kbert_model_prefix = True if "kbert" in pretrained_model_name_or_path else False
+        self.kangaroo_model_prefix = True if "kangaroo" in pretrained_model_name_or_path else False
+
+        # 初始化分词器
         # assert ".easynlp/modelzoo/" in pretrained_model_name_or_path
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
 
+        # TODO: 先不看特殊模型
         if self.kbert_model_prefix:
-            self.tokenizer.add_special_tokens({'additional_special_tokens': ['[ENT]']})
-            kg_file = user_defined_parameters.get('kg_file', '')
+            self.tokenizer.add_special_tokens({"additional_special_tokens": ["[ENT]"]})
+            kg_file = user_defined_parameters.get("kg_file", "")
             self.kg = KnowledgeGraph(spo_file=kg_file, predicate=True)
 
+        # 最大序列长度
         self.max_seq_length = max_seq_length
 
         if self.kangaroo_model_prefix:
-            entity_file = user_defined_parameters.get('entity_file', '')
-            rel_file = user_defined_parameters.get('rel_file', '')
-            CL_samples_file = user_defined_parameters.get('samples_file', '')
-            concept_emb_file = user_defined_parameters.get('concept_emb_file', '')
-            if entity_file == '' or rel_file == '':
-                raise ValueError('Kangaroo needs knowledge embedding file...')
+            entity_file = user_defined_parameters.get("entity_file", "")
+            rel_file = user_defined_parameters.get("rel_file", "")
+            CL_samples_file = user_defined_parameters.get("samples_file", "")
+            concept_emb_file = user_defined_parameters.get("concept_emb_file", "")
+            if entity_file == "" or rel_file == "":
+                raise ValueError("Kangaroo needs knowledge embedding file...")
 
             rel_df = pd.read_csv(rel_file)
             # entity_df = pd.read_csv(entity_file)[:500]
@@ -85,55 +88,61 @@ class ClassificationDataset(BaseDataset):
             self.tokenidVec, self.positionidVec = self.kangaroo_get_contrastive_samples(CL_samples_file)
             self.conceptEmbVec = self.kangaroo_get_concept_emb(concept_emb_file)
 
-        self.multi_label = user_defined_parameters.get('app_parameters', {}).get('multi_label', False)
+        # 是否使用多标签
+        self.multi_label = user_defined_parameters.get("app_parameters", {}).get("multi_label", False)
 
+        # 标签枚举值
         if label_enumerate_values is None:
             self._label_enumerate_values = "0,1".split(",")
         else:
+            # 可以从文件种读取, 一行一个
             if io.exists(label_enumerate_values):
                 with io.open(label_enumerate_values) as f:
                     self._label_enumerate_values = [line.strip() for line in f]
             else:
+                # 或者使用逗号分隔的字符串
                 self._label_enumerate_values = label_enumerate_values.split(",")
+        # 标签数
         self.max_num_labels = len(self._label_enumerate_values)
-        assert first_sequence in self.column_names, \
-            "Column name %s needs to be included in columns" % first_sequence
+        # 第一个序列名
+        assert first_sequence in self.column_names, "Column name %s needs to be included in columns" % first_sequence
         self.first_sequence = first_sequence
 
+        # 第二个序列名
         if second_sequence:
-            assert second_sequence in self.column_names, \
+            assert second_sequence in self.column_names, (
                 "Column name %s needs to be included in columns" % second_sequence
+            )
             self.second_sequence = second_sequence
         else:
             self.second_sequence = None
 
+        # 是否有标签
         if label_name:
-            assert label_name in self.column_names, \
-                "Column name %s needs to be included in columns" % label_name
+            assert label_name in self.column_names, "Column name %s needs to be included in columns" % label_name
             self.label_name = label_name
         else:
             self.label_name = None
 
+        # 标签映射, label => id
         self.label_map = dict({value: idx for idx, value in enumerate(self.label_enumerate_values)})
-
-
 
     @property
     def label_enumerate_values(self):
         """
-            Returns the label enumerate values.
+        Returns the label enumerate values.
         """
         return self._label_enumerate_values
 
     def convert_single_row_to_example(self, row):
         """Convert sample token to indices.
-            Args:
-                row: contains sequence and label.
-                text_a: the first sequence in row.
-                text_b: the second sequence in row if self.second_sequence is true.
-                label: label token if self.label_name is true.
-            Returns: sing example
-                encoding: an example contains token indices.
+        Args:
+            row: contains sequence and label.
+            text_a: the first sequence in row.
+            text_b: the second sequence in row if self.second_sequence is true.
+            label: label token if self.label_name is true.
+        Returns: sing example
+            encoding: an example contains token indices.
         """
         text_a = row[self.first_sequence]
         text_b = row[self.second_sequence] if self.second_sequence else None
@@ -142,41 +151,56 @@ class ClassificationDataset(BaseDataset):
         if self.kbert_model_prefix:
             text_a = self.kg.add_knowledge_to_text(text_a)
             text_b = self.kg.add_knowledge_to_text(text_b) if self.second_sequence else None
-            self.ent_id = self.tokenizer.convert_tokens_to_ids('[ENT]')
+            self.ent_id = self.tokenizer.convert_tokens_to_ids("[ENT]")
 
-        encoding = self.tokenizer(text_a,
-                                  text_b,
-                                  padding='max_length',
-                                  truncation=True,
-                                  max_length=self.max_seq_length)
+        # 分词
+        encoding = self.tokenizer(text_a, text_b, padding="max_length", truncation=True, max_length=self.max_seq_length)
         if not self.multi_label:
-            encoding['label_ids'] = self.label_map[label]
+            # 单标签
+            encoding["label_ids"] = self.label_map[label]
         else:
+            # 多标签, 构建 one-hot 向量
             label_id = [self.label_map[x] for x in label.split(",") if x]
             new_label_id = [0] * self.max_num_labels
             for idx in label_id:
                 new_label_id[idx] = 1
-            encoding['label_ids'] = new_label_id
+            encoding["label_ids"] = new_label_id
 
         if self.kbert_model_prefix:
-            encoding['input_ids'], encoding['token_type_ids'], encoding['attention_mask'], encoding['position_ids'], encoding['visible_matrix'] = self.kbert_row_data_process(encoding['input_ids'], encoding['token_type_ids'], encoding['attention_mask'])
+            (
+                encoding["input_ids"],
+                encoding["token_type_ids"],
+                encoding["attention_mask"],
+                encoding["position_ids"],
+                encoding["visible_matrix"],
+            ) = self.kbert_row_data_process(
+                encoding["input_ids"], encoding["token_type_ids"], encoding["attention_mask"]
+            )
 
         if self.kangaroo_model_prefix:
-            encoding['entities_position'], encoding['ent_mask'], encoding['sample_token_id'], encoding['sample_position_id'], encoding['sample_mask'], encoding['concept_emb'] = self.kangaroo_row_data_process(encoding['input_ids'])
-            encoding['pretrain_model'] = False
+            (
+                encoding["entities_position"],
+                encoding["ent_mask"],
+                encoding["sample_token_id"],
+                encoding["sample_position_id"],
+                encoding["sample_mask"],
+                encoding["concept_emb"],
+            ) = self.kangaroo_row_data_process(encoding["input_ids"])
+            encoding["pretrain_model"] = False
 
         return encoding
 
     def batch_fn(self, features):
         """
-            Divide examples into batches.
+        Divide examples into batches.
         """
+        # 为什么用 features[0] 是为了获取到所有的 key
+        # 然后重新将 list[dict] 构建成 dict[list], 转换成 tensor
         return {k: torch.tensor([dic[k] for dic in features]) for k in features[0]}
-
 
     def kbert_row_data_process(self, input_ids, token_type_ids, attention_mask):
         """
-            data process for K-BERT
+        data process for K-BERT
         """
 
         ent_input_ids = []
@@ -187,7 +211,7 @@ class ClassificationDataset(BaseDataset):
 
         pos_id = 0
         ent_pos_id = 0
-        ent_map = [] # ent_map is the log of origin_ent_id and external_ent_id
+        ent_map = []  # ent_map is the log of origin_ent_id and external_ent_id
         ent_token_count = 0
         start_origin_ent = None
         start_external_ent = None
@@ -211,11 +235,11 @@ class ClassificationDataset(BaseDataset):
                     ent_pos_ids.append(pos_id)
                     pos_id += 1
                 else:
-                    ent_pos_ids.append(pos_id+ent_pos_id)
+                    ent_pos_ids.append(pos_id + ent_pos_id)
                     ent_pos_id += 1
 
         if len(ent_input_ids) < self.max_seq_length:
-            diff_length = self.max_seq_length-len(ent_input_ids)
+            diff_length = self.max_seq_length - len(ent_input_ids)
             ent_input_ids.extend([0 for _ in range(diff_length)])
             ent_token_type_ids.extend(0 for _ in range(diff_length))
             ent_pos_ids.extend(0 for _ in range(diff_length))
@@ -233,7 +257,6 @@ class ClassificationDataset(BaseDataset):
                     ent_visible_matrix[token_id][etn_ent_id] = 0
 
         return ent_input_ids, ent_token_type_ids, ent_attention_mask, ent_pos_ids, ent_visible_matrix
-
 
     def kangaroo_row_data_process(self, token_ids, entity_num=3, entity_gap=5):
         # token_ids = input_ids[1:-1]
@@ -267,7 +290,7 @@ class ClassificationDataset(BaseDataset):
             close_flag = False
             h_index = pos[0]
             t_index = pos[1]
-            for i in range(1, entity_gap+1):
+            for i in range(1, entity_gap + 1):
                 if h_index - i < 0:
                     continue
                 if entities[h_index - i] != -100:
@@ -303,16 +326,23 @@ class ClassificationDataset(BaseDataset):
         sample_mask = torch.LongTensor((np.array(sample_token_id) != 0) * 1)
         concept_emb = self.conceptEmbVec[entity_id_index]  # [batch_size, entity_num, concept_size]
 
-        return entities_position.tolist(), ent_mask.tolist(), sample_token_id.tolist(), sample_position_id.tolist(), sample_mask.tolist(), concept_emb.tolist()
+        return (
+            entities_position.tolist(),
+            ent_mask.tolist(),
+            sample_token_id.tolist(),
+            sample_position_id.tolist(),
+            sample_mask.tolist(),
+            concept_emb.tolist(),
+        )
 
     def kangaroo_create_entity_tree(self, entity_df):
         full_name_to_id = {}
         for i in range(len(entity_df)):
-            full_name = entity_df.iloc[i]['main_name']
-            name_list = entity_df.iloc[i]['name_list'].split('|')
+            full_name = entity_df.iloc[i]["main_name"]
+            name_list = entity_df.iloc[i]["name_list"].split("|")
             if pd.isna(full_name):
-                name_list = entity_df.iloc[i]['name_list'].split('|')
-            id = int(entity_df.iloc[i]['index'])
+                name_list = entity_df.iloc[i]["name_list"].split("|")
+            id = int(entity_df.iloc[i]["index"])
             for name in name_list:
                 full_name_to_id[name] = id
 
@@ -331,25 +361,27 @@ class ClassificationDataset(BaseDataset):
     def kangaroo_get_contrastive_samples(self, samples_file, max_level=4):
         samples = np.load(samples_file, allow_pickle=True).item()
         max_index = np.max(list(samples.keys()))
-        token_id_vec = [[[0 for _ in range(self.max_seq_length)] for _ in range(max_level)] for _ in range(max_index + 2)]
+        token_id_vec = [
+            [[0 for _ in range(self.max_seq_length)] for _ in range(max_level)] for _ in range(max_index + 2)
+        ]
         pos_id_vec = [[[0 for _ in range(self.max_seq_length)] for _ in range(max_level)] for _ in range(max_index + 2)]
         # for ind in random.sample(samples.keys(), 500):
         for ind in samples.keys():
             try:
                 token_id_list = []
                 pos_id_list = []
-                for le in range(1, max_level+1):
+                for le in range(1, max_level + 1):
                     level = "level_%d" % le
                     if len(samples[ind][level]) == 0:
                         level = "level_2"
-                    tokens = samples[ind][level][0]['tokens']
+                    tokens = samples[ind][level][0]["tokens"]
                     token_ids = self.tokenizer.convert_tokens_to_ids(tokens)
-                    pos_ids = samples[ind][level][0]['position_id']
+                    pos_ids = samples[ind][level][0]["position_id"]
                     # assert len(token_ids) == len(pos_ids)
 
                     if len(token_ids) < self.max_seq_length:
-                        token_ids.extend([0]*(self.max_seq_length-len(token_ids)))
-                        pos_ids.extend([0]*(self.max_seq_length-len(pos_ids)))
+                        token_ids.extend([0] * (self.max_seq_length - len(token_ids)))
+                        pos_ids.extend([0] * (self.max_seq_length - len(pos_ids)))
 
                     token_id_list.append(token_ids)
                     pos_id_list.append(pos_ids)
@@ -369,11 +401,12 @@ class ClassificationDataset(BaseDataset):
             concept_emb_vec[int(ind) + 1] = entity2emb[ind]
         return torch.FloatTensor(concept_emb_vec)
 
-    
-class KnowledgeGraph():
+
+class KnowledgeGraph:
     """
-        Construct KG structure for K-BERT
+    Construct KG structure for K-BERT
     """
+
     def __init__(self, spo_file, predicate=False, never_split_tag=None):
         self.predicate = predicate
         self.spo_file_paths = spo_file
@@ -390,7 +423,7 @@ class KnowledgeGraph():
     def _create_lookup_table(self):
         lookup_table = {}
         print("[KnowledgeGraph] Loading spo from {}".format(self.spo_file_paths))
-        with open(self.spo_file_paths, 'r', encoding='utf-8') as f:
+        with open(self.spo_file_paths, "r", encoding="utf-8") as f:
             for line in f:
                 try:
                     subj, pred, obje = line.strip().split("\t")
@@ -413,7 +446,6 @@ class KnowledgeGraph():
         know_sent = []
 
         for token in split_sent:
-
             entities = list(self.lookup_table.get(token, []))[:max_entities]
             entities = "".join(entities)
             sent_tree.append((token, entities))
@@ -422,21 +454,22 @@ class KnowledgeGraph():
             if len(sent_tree[i][1]) == 0:
                 know_sent.append(sent_tree[i][0])
             elif len(sent_tree[i][1]) > 0:
-                know_sent.append('[ENT]')
+                know_sent.append("[ENT]")
                 know_sent.append(sent_tree[i][0])
-                know_sent.append('[ENT]')
+                know_sent.append("[ENT]")
                 know_sent.append(sent_tree[i][1])
-                know_sent.append('[ENT]')
+                know_sent.append("[ENT]")
 
         row = "".join(know_sent)
 
-
         return row
+
 
 class KangarooTrieTree:
     """
-        Construct entity prefix structure for KANGAROO
+    Construct entity prefix structure for KANGAROO
     """
+
     def __init__(self):
         self.node = [""]
         self.edge = [{}]
@@ -475,8 +508,10 @@ class KangarooTrieTree:
                 result.append(i)
         return result
 
+
 class DistillatoryClassificationDataset(DistillatoryBaseDataset, ClassificationDataset):
     pass
+
 
 class FewshotSequenceClassificationDataset(FewshotBaseDataset):
     pass
