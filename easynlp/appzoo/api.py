@@ -336,7 +336,7 @@ def get_application_dataset(
     **kwargs
 ):
     """
-    获取数据集
+    获取数据集, 使用 Dataset_Mapping
     """
     # 遍历数据集映射
     for name, dataset in Dataset_Mapping.items():
@@ -432,6 +432,9 @@ def get_application_dataset(
 
 
 def get_application_model(app_name, pretrained_model_name_or_path, user_defined_parameters, **kwargs):
+    """
+    获取模型, 使用 ModelMapping
+    """
     for name, model in ModelMapping.items():
         if app_name.startswith(name):
             if type(model) != dict:
@@ -461,6 +464,9 @@ def get_application_model(app_name, pretrained_model_name_or_path, user_defined_
 
 
 def get_application_model_for_evaluation(app_name, pretrained_model_name_or_path, user_defined_parameters, **kwargs):
+    """
+    获取用于评估的模型, 使用 Eval_Model_Mapping
+    """
     for name, model in Eval_Model_Mapping.items():
         if app_name.startswith(name):
             if type(model) != dict:
@@ -492,6 +498,9 @@ def get_application_model_for_evaluation(app_name, pretrained_model_name_or_path
 
 
 def get_application_evaluator(app_name, valid_dataset, user_defined_parameters, **kwargs):
+    """
+    获取评估器, 使用 Evaluator_Mapping
+    """
     for name, evaluator in Evaluator_Mapping.items():
         if app_name.startswith(name):
             if type(evaluator) != dict:
@@ -521,6 +530,9 @@ def get_application_evaluator(app_name, valid_dataset, user_defined_parameters, 
 
 
 def get_application_predictor(app_name, model_dir, user_defined_parameters, **kwargs):
+    """
+    获取预测器, 使用 Predictor_Mapping
+    """
     for name, predictor in Predictor_Mapping.items():
         if app_name.startswith(name):
             if type(predictor) != dict:

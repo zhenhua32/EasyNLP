@@ -296,6 +296,9 @@ class BaseDataset(Dataset):
         return ["0", "1"]
 
     def batch_fn(self, features):
+        """
+        用作 DataLoader 的 collate_fn
+        """
         raise NotImplementedError
 
     @property
