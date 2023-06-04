@@ -302,6 +302,9 @@ class Trainer(object):
         logger.info(self.model_module.config.to_json_string())
 
     def before_epoch(self, _epoch):
+        """
+        每轮 epoch 开始前的操作
+        """
         args = self.args
         self._current_epoch = _epoch
         if args.n_gpu > 1:
@@ -310,6 +313,7 @@ class Trainer(object):
         self._epoch_tr_loss = 0.0
         self._epoch_n_tr_steps = 0.0
         if args.is_master_node:
+            # 记录状态
             self._epoch_stats = Statistics(
                 epoch_num=int(args.epoch_num), total_training_steps=self.total_training_steps
             )
@@ -332,6 +336,9 @@ class Trainer(object):
         return ctx_manager
 
     def optimizer_step(self):
+        """
+        更新优化器
+        """
         if self.args.use_torchacc:
             import torchacc.torch_xla.core.xla_model as xm
 
@@ -364,17 +371,22 @@ class Trainer(object):
         self._optimizer.zero_grad()
 
     def after_iter(self, _step, _epoch, loss_dict):
+        """
+        每个批次训练完后的动作
+        """
         args = self.args
 
         self.pred_loss = loss_dict["loss"].item()
         self._epoch_tr_loss += self.pred_loss
         self._epoch_n_tr_steps += 1
+        # 到达梯度累积的步数，进行一次优化器的更新
         if (_step + 1) % args.gradient_accumulation_steps == 0:
             self.optimizer_step()
             self._global_step += 1
 
             if not args.is_master_node:
                 return
+            # 下面都是主节点的操作
             self._epoch_stats.update(loss_dict)
             if self._global_step == 0 or (self._global_step + 1) % args.logging_steps == 0:
                 self._epoch_stats.output(self._global_step + 1, _epoch, self.learning_rate)
@@ -386,13 +398,16 @@ class Trainer(object):
                 output_dir=os.path.join(args.checkpoint_dir, "log"),
             )
 
+            # 保存模型, 每 N 步数保存一次
             if args.save_checkpoint_steps and (self._global_step + 1) % args.save_checkpoint_steps == 0:
                 if args.save_all_checkpoints:
                     self.save_checkpoint()
+                # 评估也是在这里执行的
                 if self.evaluator is not None:
                     logger.info(f"========== Evaluation at global step {self._global_step + 1} ==========")
                     self._eval_scores = self.evaluator.evaluate(model=self.model_module)
 
+                    # 第一个指标的值大于最好的指标值，就保存模型
                     if self._eval_scores[0][1] > self.evaluator.best_valid_score:
                         logger.info(
                             "Saving best model to %s..." % os.path.join(args.checkpoint_dir, "pytorch_model.bin")
@@ -418,15 +433,20 @@ class Trainer(object):
                     )
 
     def after_train(self):
+        """
+        整个训练结束后的动作
+        """
         args = self.args
         # Save last checkpoint if needed
         if not args.is_master_node:
             return
 
         if args.save_checkpoint_steps is None:
+            # 最终保存一版模型
             logger.info("Saving best model to %s..." % os.path.join(args.checkpoint_dir, "pytorch_model.bin"))
             self.save_checkpoint(save_best=True)
         elif self.evaluator is not None:
+            # 评估一版
             self._eval_scores = self.evaluator.evaluate(model=self.model_module)
             if self._eval_scores[0][1] > self.evaluator.best_valid_score:
                 logger.info("Saving best model to %s..." % os.path.join(args.checkpoint_dir, "pytorch_model.bin"))
@@ -437,6 +457,9 @@ class Trainer(object):
         logger.info("Training Time: {}".format(time.time() - self._start_time))
 
     def save_checkpoint(self, save_best=False):
+        """
+        保存模型
+        """
         if not self.args.is_master_node:
             return
 
@@ -453,12 +476,13 @@ class Trainer(object):
             label_enumerate_values=self._train_loader.dataset.label_enumerate_values,
         )
 
-        # Save config.json
+        # Save config.json 保存配置文件
         output_config_file = os.path.join(self.args.checkpoint_dir, "config.json")
         with io.open(output_config_file, "w") as f:
             f.write(self.model_module.config.to_json_string())
 
         if self.args.pretrained_model_name_or_path is not None:
+            # N 选一, 保存词表
             # Save vocab.txt
             if os.path.exists(
                 os.path.join(
@@ -516,6 +540,7 @@ class Trainer(object):
             else:
                 raise FileNotFoundError
 
+            # 还有特殊的文件
             # Save spiece.model
             spiece_path = os.path.join(
                 get_dir_name(
@@ -543,12 +568,13 @@ class Trainer(object):
                     ),
                     os.path.join(get_dir_name(self.args.checkpoint_dir), "RRDB_ESRGAN_x4.pth"),
                 )
-        # Save the model
+        # Save the model 保存模型
         model_to_save_prefix = "pytorch_model" if save_best else "pytorch_model_step_%d" % (self._global_step + 1)
         with io.open(os.path.join(self.args.checkpoint_dir, model_to_save_prefix + ".bin"), "wb") as output_model_file:
             if self.reset_model_state_flag:
                 from collections import OrderedDict
 
+                # 原来重置就是这么个操作, 重新构建一个有序字典, 然后将 key 的前缀 model. 去掉
                 new_state_dict = OrderedDict()
                 for k, v in self.model_module.state_dict().items():
                     name = k[6:]  # remove `model.`
@@ -557,6 +583,7 @@ class Trainer(object):
             else:
                 torch.save(self.model_module.state_dict(), output_model_file)
 
+        # 保存模型的 meta 信息
         meta_data = {
             "epoch": self._current_epoch,
             "global_step": self._global_step,
@@ -600,7 +627,7 @@ class Trainer(object):
                                    self.args.export_tf_checkpoint_type)
             """
 
-        # This is a hack
+        # This is a hack  这一步又是为了什么?
         if torch.cuda.is_available():
             torch.cuda.set_device(self.args.local_rank)
 
@@ -628,40 +655,55 @@ class Trainer(object):
         return positive_negative_examples_results_new
 
     def train(self):
+        """
+        训练流程
+        """
         self.log_train_infos()
         args = self.args
         with contextlib.suppress():
+            # 每一轮训练
             for _epoch in range(self._start_epoch, int(args.epoch_num)):
+                # 每一轮训练前的钩子函数
                 self.before_epoch(_epoch)
+                # 怎么没用上
                 start_time = time.time()
                 loss_total = 0
                 pn_loss_total = 0
+                # 每一个批次训练
                 for _step, batch in enumerate(self._train_loader):
+                    # 跳过已经训练过的批次
                     if self._global_step + 1 < self._start_global_step:
+                        # 这个步数其实是梯度累计的
                         if (_step + 1) % args.gradient_accumulation_steps == 0:
                             self._global_step += 1
                         continue
                     self.before_iter()
 
                     if not self.args.use_torchacc:
+                        # 准备数据
                         batch = {
                             key: val.to(self._device) if isinstance(val, torch.Tensor) else val
                             for key, val in batch.items()
                         }
 
+                    # 标签数据
                     label_ids = batch.pop("label_ids", None)
+                    # 正负样本
                     positive_negative_examples = batch.pop("positive_negative_examples", None)
                     with self.autocast_context_manager():
                         if label_ids is not None:
                             forward_outputs = self._model(batch)
-                            # for ckbert contrast learning
+                            # for ckbert contrast learning 对比学习
                             if self.contrast_learning_flag:
                                 positive_negative_examples_results_new = self.contrast_learning_process(
                                     positive_negative_examples
                                 )
                         else:
+                            # 没有 label_ids 的时候, 是从 _model(batch) 中获取的
                             forward_outputs, label_ids = self._model(batch)
+                        # 计算损失
                         if batch.get("insert_know_labels") is not None:
+                            # 知识标签
                             loss_dict = self.model_module.compute_loss(
                                 forward_outputs, label_ids, batch.get("insert_know_labels")
                             )
@@ -676,20 +718,24 @@ class Trainer(object):
                             loss_dict = self.model_module.compute_loss(forward_outputs, label_ids)
 
                     _loss = loss_dict["loss"]
+                    # 对比学习有两种损失
                     if self.contrast_learning_flag:
                         _loss = loss_dict["loss"] + loss_dict["cl_loss"]
 
+                    # 更新损失, 除以 GPU 数和梯度累计步数
                     if args.n_gpu > 1:
                         _loss = _loss.mean()
                     if args.gradient_accumulation_steps > 1:
                         _loss = _loss / args.gradient_accumulation_steps
 
+                    # 反向传播
                     if self.args.use_amp:
                         self._scaler.scale(_loss).backward()
                     else:
                         _loss.backward()
 
                     if self.contrast_learning_flag:
+                        # 对比学习会有个 pn_loss
                         loss_total += _loss
                         pn_loss_total += loss_dict["cl_loss"]
                         if _step % 10 == 0:
@@ -699,10 +745,13 @@ class Trainer(object):
                             loss_total = 0
                             pn_loss_total = 0
 
+                    # 钩子函数
                     self.after_iter(_step, _epoch, loss_dict)
-
+                # 这个时间也没用上
                 end_time = time.time()
+                # 钩子函数
                 self.after_epoch()
+        # 记录总训练时间
         print(
             "Training Time: {}, rank {}, gsteps {}".format(time.time() - self._start_time, args.rank, self._global_step)
         )

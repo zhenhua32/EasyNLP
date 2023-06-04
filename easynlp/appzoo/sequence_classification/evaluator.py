@@ -107,6 +107,7 @@ class SequenceClassificationEvaluator(Evaluator):
 
         # 计算评估指标
         logits_list = np.array(logits_list)
+        # 输出是个元组的数组, 每个元组里有两个值, 第一个是指标名字, 第二个是指标值
         eval_outputs = list()
         for metric in self.metrics:
             if metric.endswith("accuracy"):
