@@ -37,3 +37,5 @@ python setup.py install
 
 - docs: API文档目录, 不用看了, 很久没更新了. `git log docs`, 就提交了一次.
 
+
+![桃花与猫](./my_doc/image/桃花与猫.jpg)
