@@ -35,6 +35,10 @@ from ..utils import EASYNLP_LOCAL_DATAHUB, EASYNLP_REMOTE_ROOT
 
 
 class BaseDataset(Dataset):
+    """
+    基础数据集类
+    """
+
     def __init__(
         self,
         data_file: str,
