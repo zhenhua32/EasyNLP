@@ -447,6 +447,7 @@ def get_application_model(app_name, pretrained_model_name_or_path, user_defined_
                 return model(pretrained_model_name_or_path, user_defined_parameters=user_defined_parameters, **kwargs)
             app_parameters = user_defined_parameters.get("app_parameters")
             model_keys = set([key.split(".")[0] for key in model.keys()])
+            # 交集, 且只能有一个或没有. 史诗级套路, 都是在 user_defined_parameters 里面指定的变异模型
             union_name = list(model_keys & set(app_parameters.keys()))
             assert (
                 len(union_name) <= 1
@@ -463,6 +464,7 @@ def get_application_model(app_name, pretrained_model_name_or_path, user_defined_
                     pretrained_model_name_or_path, user_defined_parameters=user_defined_parameters, **kwargs
                 )
             else:
+                # 原来蒸馏训练是在这里匹配上的
                 return model[union_name[0]](
                     pretrained_model_name_or_path, user_defined_parameters=user_defined_parameters, **kwargs
                 )
@@ -716,8 +718,8 @@ def default_main_fn():
                 eval_batch_size=args.micro_batch_size,
                 user_defined_parameters=user_defined_parameters,
             )
-        # 是否使用蒸馏训练器
-        enable_distillation = user_defined_parameters.get("app_parameters", False).get("enable_distillation", False)
+        # 是否使用蒸馏训练器. 我就觉得这个代码有问题, 第一步已经选中 False 了, 就会报错, 不能再用 get 了, 又没有短路
+        enable_distillation = user_defined_parameters.get("app_parameters", {}).get("enable_distillation", False)
         # Training
         default_trainer = DistillatoryTrainer if enable_distillation else Trainer
         trainer = default_trainer(

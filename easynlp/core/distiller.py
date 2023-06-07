@@ -21,17 +21,21 @@ from .trainer import Trainer
 
 
 class DistillatoryTrainer(Trainer):
+    """
+    蒸馏训练器
+    """
+
     def __init__(self, user_defined_parameters, **kwargs):
         super(DistillatoryTrainer, self).__init__(**kwargs)
 
         if not isinstance(user_defined_parameters, dict):
-            raise TypeError(
-                '`user_defined_parameters` should be a characterized '
-                'dictionary data structure.')
-        self.distillation_params = user_defined_parameters.get(
-            'app_parameters')
+            raise TypeError("`user_defined_parameters` should be a characterized dictionary data structure.")
+        self.distillation_params = user_defined_parameters.get("app_parameters")
 
     def train(self):
+        """
+        训练流程
+        """
         self.log_train_infos()
         args = self.args
 
@@ -48,24 +52,24 @@ class DistillatoryTrainer(Trainer):
                 self.before_iter()
 
                 batch = {
-                    key: val.to(args.local_rank) if isinstance(
-                        val, torch.Tensor) else val
-                    for key, val in batch.items()
+                    key: val.to(args.local_rank) if isinstance(val, torch.Tensor) else val for key, val in batch.items()
                 }
-                label_ids = batch.pop('label_ids')
+                label_ids = batch.pop("label_ids")
 
+                # 设置 teacher_logits, 从 batch 数据中获取
                 # type, temperature, alpha, teacher_logits...
-                distillation_params['teacher_logits'] = batch.pop(
-                    'teacher_logits')
+                distillation_params["teacher_logits"] = batch.pop("teacher_logits")
 
                 forward_outputs = self._model(batch)
+                # 看起来和简单, 就是多了 distillation_params 参数
+                # 这还是要结合具体的模型看
                 loss_dict = self.model_module.compute_loss(
                     forward_outputs,
                     label_ids,
                     **distillation_params,
                 )
 
-                _loss = loss_dict['loss']
+                _loss = loss_dict["loss"]
                 if args.n_gpu > 1:
                     _loss = _loss.mean()
                 if args.gradient_accumulation_steps > 1:
@@ -81,15 +85,16 @@ class DistillatoryTrainer(Trainer):
 
 
 class MetaTeacherTrainer(Trainer):
+    """
+    元教师训练器
+    """
+
     def __init__(self, model, train_dataset, evaluator, **kwargs):
         super().__init__(model, train_dataset, evaluator, **kwargs)
-        user_defined_parameters = kwargs['user_defined_parameters']
-        self.use_domain_loss = True if user_defined_parameters[
-            'use_domain_loss'] == 'True' else False
-        self.use_sample_weights = True if user_defined_parameters[
-            'use_sample_weights'] == 'True' else False
-        self.domain_loss_weight = float(
-            user_defined_parameters['domain_loss_weight'])
+        user_defined_parameters = kwargs["user_defined_parameters"]
+        self.use_domain_loss = True if user_defined_parameters["use_domain_loss"] == "True" else False
+        self.use_sample_weights = True if user_defined_parameters["use_sample_weights"] == "True" else False
+        self.domain_loss_weight = float(user_defined_parameters["domain_loss_weight"])
 
     def train(self):
         self.log_train_infos()
@@ -103,23 +108,23 @@ class MetaTeacherTrainer(Trainer):
                     continue
                 self.before_iter()
                 batch = {
-                    key: val.to(args.local_rank) if isinstance(
-                        val, torch.Tensor) else val
-                    for key, val in batch.items()
+                    key: val.to(args.local_rank) if isinstance(val, torch.Tensor) else val for key, val in batch.items()
                 }
-                label_ids = batch.pop('label_ids')
+                label_ids = batch.pop("label_ids")
                 forward_outputs = self._model(batch)
+                # 求个损失有很多参数
                 loss_input = {
-                    'forward_outputs': forward_outputs,
-                    'label_ids': label_ids,
-                    'use_domain_loss': self.use_domain_loss,
-                    'use_sample_weights': self.use_sample_weights,
-                    'domain_ids': batch['domain_ids'],
-                    'sample_weights': batch['sample_weights'],
-                    'domain_loss_weight': self.domain_loss_weight
+                    "forward_outputs": forward_outputs,
+                    "label_ids": label_ids,
+                    "use_domain_loss": self.use_domain_loss,
+                    "use_sample_weights": self.use_sample_weights,
+                    "domain_ids": batch["domain_ids"],
+                    "sample_weights": batch["sample_weights"],
+                    "domain_loss_weight": self.domain_loss_weight,
                 }
+                # 这还是要结合具体的模型看
                 loss_dict = self.model_module.compute_loss(**loss_input)
-                _loss = loss_dict['loss']
+                _loss = loss_dict["loss"]
                 if args.n_gpu > 1:
                     _loss = _loss.mean()
                 if args.gradient_accumulation_steps > 1:
@@ -128,28 +133,33 @@ class MetaTeacherTrainer(Trainer):
 
                 self.after_iter(_step, _epoch, loss_dict)
             self.after_epoch()
-        print('Training Time: {}, rank {}, gsteps {}'.format(
-            time.time() - self._start_time, args.rank, self._global_step))
+        print(
+            "Training Time: {}, rank {}, gsteps {}".format(time.time() - self._start_time, args.rank, self._global_step)
+        )
         self.after_train()
 
 
 class MetaDistillationTrainer(Trainer):
-    def __init__(self, student_model, teacher_model, train_dataset, evaluator,
-                 **kwargs):
+    """
+    元蒸馏训练器
+    """
+
+    def __init__(self, student_model, teacher_model, train_dataset, evaluator, **kwargs):
         super().__init__(student_model, train_dataset, evaluator, **kwargs)
         self._teacher = None
         self.set_teacher_model(teacher_model)
-        user_defined_parameters = kwargs['user_defined_parameters']
-        self.domain_loss_weight = float(
-            user_defined_parameters['domain_loss_weight'])
-        self.T = int(user_defined_parameters['T'])
-        self.distill_stage = user_defined_parameters['distill_stage']
+        user_defined_parameters = kwargs["user_defined_parameters"]
+        self.domain_loss_weight = float(user_defined_parameters["domain_loss_weight"])
+        self.T = int(user_defined_parameters["T"])
+        self.distill_stage = user_defined_parameters["distill_stage"]
         self.num_labels = student_model.config.num_labels
-        if self.distill_stage not in ['first', 'second']:
-            raise RuntimeError(
-                'The distill_stage flag must be one of [first, second]')
+        if self.distill_stage not in ["first", "second"]:
+            raise RuntimeError("The distill_stage flag must be one of [first, second]")
 
     def set_teacher_model(self, model):
+        """
+        设置教师模型, 就是设置了下分布式相关的操作
+        """
         if self.args.use_torchacc:
             self._teacher = model.to(self._device)
         elif self.args.n_gpu == 1:
@@ -159,9 +169,10 @@ class MetaDistillationTrainer(Trainer):
                 model.to(self.args.local_rank),
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
-                find_unused_parameters=True)
+                find_unused_parameters=True,
+            )
         else:
-            raise Exception('CPU Training is not supported.')
+            raise Exception("CPU Training is not supported.")
 
     def train(self):
         self.log_train_infos()
@@ -175,86 +186,58 @@ class MetaDistillationTrainer(Trainer):
                     continue
                 self.before_iter()
                 input_dict = {
-                    'input_ids': batch['input_ids'].to(args.local_rank),
-                    'token_type_ids':
-                    batch['token_type_ids'].to(args.local_rank),
-                    'attention_mask':
-                    batch['attention_mask'].to(args.local_rank),
-                    'label_ids': batch['label_ids'].to(args.local_rank),
-                    'domain_ids': batch['domain_ids'].to(args.local_rank),
-                    'sample_weights':
-                    batch['sample_weights'].to(args.local_rank),
+                    "input_ids": batch["input_ids"].to(args.local_rank),
+                    "token_type_ids": batch["token_type_ids"].to(args.local_rank),
+                    "attention_mask": batch["attention_mask"].to(args.local_rank),
+                    "label_ids": batch["label_ids"].to(args.local_rank),
+                    "domain_ids": batch["domain_ids"].to(args.local_rank),
+                    "sample_weights": batch["sample_weights"].to(args.local_rank),
                 }
-                label_ids = batch.pop('label_ids')
-                if self.distill_stage == 'first':
+                label_ids = batch.pop("label_ids")
+                # 蒸馏还分成两阶段
+                if self.distill_stage == "first":
                     # student_atts, student_reps, student_domain_rep
-                    student_output = self._model(
-                        input_dict,
-                        is_student=True,
-                        distill_stage=self.distill_stage)
+                    student_output = self._model(input_dict, is_student=True, distill_stage=self.distill_stage)
                     with torch.no_grad():
                         # logits, teacher_atts, teacher_reps, teacher_domain_rep
-                        teacher_output = self._teacher(input_dict,
-                                                       is_student=False,
-                                                       distill_stage='all')
-                        teacher_probs = torch.softmax(teacher_output['logits'],
-                                                      dim=-1)
-                        label_onehots = torch.eye(
-                            self.num_labels)[label_ids].to(args.local_rank)
-                        grt_sample_weights = 1 / (torch.exp(
-                            torch.sum(((teacher_probs - label_onehots) *
-                                       label_onehots)**2,
-                                      dim=-1)) + 1)
+                        teacher_output = self._teacher(input_dict, is_student=False, distill_stage="all")
+                        teacher_probs = torch.softmax(teacher_output["logits"], dim=-1)
+                        label_onehots = torch.eye(self.num_labels)[label_ids].to(args.local_rank)
+                        grt_sample_weights = 1 / (
+                            torch.exp(torch.sum(((teacher_probs - label_onehots) * label_onehots) ** 2, dim=-1)) + 1
+                        )
 
                     compute_loss_input = {
-                        'distill_stage':
-                        self.distill_stage,
-                        'local_rank':
-                        args.local_rank,
-                        'label_ids':
-                        label_ids,
-                        'student_atts':
-                        student_output['attentions'],
-                        'student_reps':
-                        student_output['sequence_output'],
-                        'student_domain_rep':
-                        student_output['domain_content_output'],
-                        'teacher_atts':
-                        teacher_output['attentions'],
-                        'teacher_reps':
-                        teacher_output['sequence_output'],
-                        'teacher_domain_rep':
-                        teacher_output['domain_content_output'],
-                        'grt_sample_weights':
-                        grt_sample_weights,
-                        'sample_weights':
-                        batch['sample_weights'].to(args.local_rank),
-                        'domain_loss_weight':
-                        self.domain_loss_weight,
+                        "distill_stage": self.distill_stage,
+                        "local_rank": args.local_rank,
+                        "label_ids": label_ids,
+                        "student_atts": student_output["attentions"],
+                        "student_reps": student_output["sequence_output"],
+                        "student_domain_rep": student_output["domain_content_output"],
+                        "teacher_atts": teacher_output["attentions"],
+                        "teacher_reps": teacher_output["sequence_output"],
+                        "teacher_domain_rep": teacher_output["domain_content_output"],
+                        "grt_sample_weights": grt_sample_weights,
+                        "sample_weights": batch["sample_weights"].to(args.local_rank),
+                        "domain_loss_weight": self.domain_loss_weight,
                     }
 
                 else:
-                    student_output = self._model(
-                        input_dict,
-                        is_student=True,
-                        distill_stage=self.distill_stage)
+                    student_output = self._model(input_dict, is_student=True, distill_stage=self.distill_stage)
                     with torch.no_grad():
-                        teacher_output = self._teacher(input_dict,
-                                                       is_student=False,
-                                                       distill_stage='second')
+                        teacher_output = self._teacher(input_dict, is_student=False, distill_stage="second")
                     compute_loss_input = {
-                        'distill_stage': self.distill_stage,
-                        'local_rank': args.local_rank,
-                        'label_ids': label_ids,
-                        'student_logits': student_output['logits'],
-                        'teacher_logits': teacher_output['logits'],
-                        'T': self.T
+                        "distill_stage": self.distill_stage,
+                        "local_rank": args.local_rank,
+                        "label_ids": label_ids,
+                        "student_logits": student_output["logits"],
+                        "teacher_logits": teacher_output["logits"],
+                        "T": self.T,
                     }
 
-                loss_dict = self.model_module.compute_loss(
-                    **compute_loss_input)
+                loss_dict = self.model_module.compute_loss(**compute_loss_input)
 
-                _loss = loss_dict['loss']
+                _loss = loss_dict["loss"]
                 if args.n_gpu > 1:
                     _loss = _loss.mean()
                 if args.gradient_accumulation_steps > 1:
@@ -263,6 +246,7 @@ class MetaDistillationTrainer(Trainer):
 
                 self.after_iter(_step, _epoch, loss_dict)
             self.after_epoch()
-        print('Training Time: {}, rank {}, gsteps {}'.format(
-            time.time() - self._start_time, args.rank, self._global_step))
+        print(
+            "Training Time: {}, rank {}, gsteps {}".format(time.time() - self._start_time, args.rank, self._global_step)
+        )
         self.after_train()

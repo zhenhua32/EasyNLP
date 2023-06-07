@@ -160,17 +160,24 @@ def set_variables_for_cli(extra_args_provider=None, defaults={}, ignore_unknown_
     return _GLOBAL_ARGS
 
 
-def parse_user_defined_parameters(user_defined_parameters):
+def parse_user_defined_parameters(user_defined_parameters: str):
+    """
+    解析用户定义的参数
+    返回字典, key 包含 app_parameters 和 model_parameters, 以及其他的参数
+    """
     global _GLOBAL_APP_PARAMETER_NAMES
     global _GLOBAL_MODEL_PARAMETER_NAMES
     ret = {}
     app_parameters = {}
     model_parameters = {}
     if user_defined_parameters is not None:
+        # 按照空格分割, 包括 \n \t 等
         for ele in user_defined_parameters.split():
+            # 用 = 连接参数名和参数值
             key = ele.split("=")[0]
             value = ele.split("=")[1]
             if key in _GLOBAL_APP_PARAMETER_NAMES:
+                # 如果类型已经预定义了, 就转换类型, 否则就是 str
                 value_type = _GLOBAL_APP_PARAMETER_NAMES[key]
                 if value_type == "int":
                     app_parameters[key] = int(value)
@@ -186,6 +193,7 @@ def parse_user_defined_parameters(user_defined_parameters):
             elif key in _GLOBAL_MODEL_PARAMETER_NAMES:
                 model_parameters[key] = value
             else:
+                # 如果参数不在预定义的名字中, 就直接加入到字典中
                 ret[key] = value
     ret["app_parameters"] = app_parameters
     if len(model_parameters) != 0:
