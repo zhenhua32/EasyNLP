@@ -147,6 +147,12 @@ try:
 except:
     pass
 
+
+"""
+app_name 是第一要素, 决定了使用什么样的模型, 完成什么样的任务.
+"""
+
+
 # 数据集映射
 Dataset_Mapping = {
     "text_classify": {
