@@ -272,7 +272,9 @@ def get_app_model_path(model_name, disable_auto_download=False):
                         if not io.exists(os.path.dirname(local_tar_file_path)):
                             io.makedirs(os.path.dirname(local_tar_file_path))
                         # 还是在用 wget 下载, -P 是用来指定下载目录的
-                        os.system("wget " + remote_url + " -P " + os.path.dirname(local_tar_file_path))
+                        cmd = "wget " + remote_url + " -P " + os.path.dirname(local_tar_file_path)
+                        print(cmd)
+                        os.system(cmd)
                     # 解压到目录下
                     tar = tarfile.open(local_tar_file_path, "r:gz")
                     local_app_model_path = local_tar_file_path.replace(".tgz", "")
