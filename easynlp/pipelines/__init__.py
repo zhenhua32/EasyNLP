@@ -46,12 +46,15 @@ from ..utils import EASYNLP_CACHE_ROOT, EASYNLP_REMOTE_MODELZOO, EASYNLP_LOCAL_A
 
 
 logger = logging.getLogger(__name__)
+
+# 定义任务别名
 # Some tasks with different names but the same processing flow are mapped here.
 TASK_ALIASES = {
     "sentiment-analysis": "text-classification",
     "question-answer": "text_match",
 }
 
+# 支持的任务, default 定义模型名字
 SUPPORTED_TASKS = {
     "text_classify": {
         "impl": SequenceClassificationPipeline,
@@ -130,6 +133,7 @@ def pipeline(
     task_or_model: str = None, model_path: str = None, pipeline_class: Optional[Any] = None, **kwargs
 ) -> Pipeline:
     """
+    构建一个任务
     Utility factory method to build a [`Pipeline`].
 
     Args:
@@ -145,14 +149,19 @@ def pipeline(
     app_name = None
     app_setting = None
     if task_or_model in support_task:
+        # 第一种情况, task_or_model 是任务名字
         app_name = task_or_model
+        # 为什么只在 SUPPORTED_TASKS 试, TASK_ALIASES 的 key 也会出现的, bug
         app_setting = SUPPORTED_TASKS[app_name]
         if model_path is None:
+            # 原来 default 定义的是模型名字
             model_path = get_app_model_path(app_setting["default"])
     elif task_or_model in get_supported_app_model(False):
+        # 第二种情况, task_or_model 是模型名字
         logger.info("You are using easynlp model, the parameter named 'model_path' is ignored.")
         model_name = task_or_model
         model_path = get_app_model_path(model_name)
+        # 从 model_name 获取 app_name
         app_name = get_remote_app_model_mapping()[model_name]["app_name"]
         app_setting = SUPPORTED_TASKS[app_name]
     else:
@@ -165,11 +174,13 @@ def pipeline(
     assert app_setting is not None
     pipeline_class = app_setting["impl"]
     model_cls = app_setting["model_cls"]
+    # 初始化 pipeline
     return pipeline_class(model_path, model_cls, kwargs)
 
 
 def get_supported_tasks() -> List[str]:
     """
+    获取支持的任务列表
     Returns a list of supported task strings.
     """
     supported_tasks = list(SUPPORTED_TASKS.keys()) + list(TASK_ALIASES.keys())
@@ -179,12 +190,14 @@ def get_supported_tasks() -> List[str]:
 
 def get_remote_app_model_mapping() -> dict:
     """
+    获取远程模型映射
     Returns a dict of supported model. It's a tool function for get_supported_app_model().
     """
     remote_base = EASYNLP_REMOTE_MODELZOO
     cache_root = EASYNLP_CACHE_ROOT
     remote_file_path = os.path.join(remote_base, "appzoo_config.json")
     local_file_path = os.path.join(cache_root, "appzoo_config.json")
+    # 将远程的模型映射文件下载到本地
     try:
         if not os.path.exists(cache_root):
             os.makedirs(cache_root)
@@ -197,6 +210,7 @@ def get_remote_app_model_mapping() -> dict:
             )
         else:
             raise RuntimeError
+    # 读取模型映射文件
     with io.open(local_file_path) as f:
         easynlp_model_mapping = json.loads(f.read())
     return easynlp_model_mapping
@@ -204,10 +218,11 @@ def get_remote_app_model_mapping() -> dict:
 
 def get_supported_app_model(sort=True) -> dict:
     """
+    返回支持的模型列表
     Returns a dict of supported model sorted by model's app_name when 'srot' flag is True.
     """
     easynlp_model_mapping = get_remote_app_model_mapping()
-    if sort == False:
+    if sort is False:
         return list(easynlp_model_mapping)
     model_dict = dict()
     for model in list(easynlp_model_mapping):
@@ -222,6 +237,7 @@ def get_supported_app_model(sort=True) -> dict:
 
 def get_app_model_path(model_name, disable_auto_download=False):
     """
+    下载模型并返回模型的绝对路径
     Download the remote app model to local machine and return the absolute path.
     The function returns the absolute path if the model already exists locally.
     """
@@ -229,6 +245,7 @@ def get_app_model_path(model_name, disable_auto_download=False):
     remote_modelzoo_url = EASYNLP_REMOTE_MODELZOO
     if not io.exists(appzoo_base_dir):
         io.makedirs(appzoo_base_dir)
+    # 获取模型映射
     easynlp_app_mapping = get_remote_app_model_mapping()
     if model_name in easynlp_app_mapping:
         app_model_name = model_name
@@ -240,11 +257,13 @@ def get_app_model_path(model_name, disable_auto_download=False):
                 "%s not exists in OSS" % app_local_path
             )
         else:
+            # 需要下载模型
             if not disable_auto_download:
                 # Download the model tar file and untar the files (do once in master node while distributed training)
                 remote_url = os.path.join(remote_modelzoo_url, remote_app_model_path)
                 local_tar_file_path = os.path.join(appzoo_base_dir, remote_app_model_path.split("/")[1])
                 if io.isdir(local_tar_file_path.replace(".tgz", "")):
+                    # 目录已存在, 不需要重新下载
                     logger.info("`%s` already exists" % (local_tar_file_path))
                     return local_tar_file_path.replace(".tgz", "")
                 else:
@@ -252,7 +271,9 @@ def get_app_model_path(model_name, disable_auto_download=False):
                         logger.info("Downloading `%s` to %s" % (appzoo_base_dir, local_tar_file_path))
                         if not io.exists(os.path.dirname(local_tar_file_path)):
                             io.makedirs(os.path.dirname(local_tar_file_path))
+                        # 还是在用 wget 下载, -P 是用来指定下载目录的
                         os.system("wget " + remote_url + " -P " + os.path.dirname(local_tar_file_path))
+                    # 解压到目录下
                     tar = tarfile.open(local_tar_file_path, "r:gz")
                     local_app_model_path = local_tar_file_path.replace(".tgz", "")
                     tar.extractall(os.path.dirname(local_tar_file_path))
@@ -260,6 +281,7 @@ def get_app_model_path(model_name, disable_auto_download=False):
                     os.remove(local_tar_file_path)
         return local_app_model_path
     else:
+        # 模型不存在
         error_msg = "`%s` is not a existing pre-defined model name. Here're the list: \n" % model_name
         for key in easynlp_app_mapping.keys():
             error_msg += "\t" + key + "\n"

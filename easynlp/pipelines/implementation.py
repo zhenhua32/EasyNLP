@@ -29,6 +29,7 @@ from ..appzoo import (
 
 class Pipeline(ABC):
     """
+    Pipeline 定义了最简单易用的接口, 用于调用模型.
     The Pipeline class is the class from which all pipelines inherit.
     You can build pipelines quickly by taking 'Predictor' code.
 
@@ -48,12 +49,20 @@ class Pipeline(ABC):
             raise RuntimeError("Input only supports strings or lists of strings")
         if type(inputs) == str:
             inputs = [inputs]
+        # 就是构建了一个 list[dict], key 是 first_sequence
         return [{"first_sequence": input_sentence} for input_sentence in inputs]
 
     def __call__(self, inputs) -> dict:
+        """
+        调用流程
+        """
+        # 格式化输入
         inputs = self.format_input(inputs)
+        # 预处理
         model_inputs = self.preprocess(inputs)
+        # 模型推理
         model_outputs = self.predict(model_inputs)
+        # 后处理
         results = self.postprocess(model_outputs)
         return results
 
@@ -118,11 +127,15 @@ class LatentDiffusionPipeline(LatentDiffusionPredictor, Pipeline):
 
 
 class SequenceClassificationPipeline(SequenceClassificationPredictor, Pipeline):
+    """
+    就看下这个吧, 最简单的序列分类器
+    """
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """
         You need to post-process the outputs of the __call__ to get the fields you need.
         """
         results = super().__call__(*args, **kwds)
+        # 简单的后处理, 只有一个字段的字典的列表
         if type(results) == dict:
             return [{"label": results["predictions"]}]
         elif type(results) == list:
