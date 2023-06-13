@@ -20,12 +20,14 @@ import os
 import torch
 import json
 
+# TODO: windows 下也太离谱了, 一直在导入这个文件, 然后这个 print 就一直在输出
 try:
     import deepspeed
 except:
-    print(
-        "NOTE: if you wish to use GLM models, please refer to EasyNLP/examples/appzoo_tutorials/sequence_generation/README.md!"
-    )
+    # print(
+    #     "NOTE: if you wish to use GLM models, please refer to EasyNLP/examples/appzoo_tutorials/sequence_generation/README.md!"
+    # )
+    pass
 
 
 def is_torchx_available():

@@ -96,7 +96,7 @@ def main():
         with socket() as s:
             s.bind(("", 0))
             random_available_port = s.getsockname()[1]
-        cmd = ["python"]
+        cmd = [sys.executable]
         cmd.append("-m")
         cmd.append("torch.distributed.launch")
         cmd.append("--nproc_per_node")

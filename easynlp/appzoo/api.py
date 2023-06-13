@@ -626,6 +626,10 @@ def default_main_fn():
     args = get_args()
     user_defined_parameters = parse_user_defined_parameters(args.user_defined_parameters)
 
+    print("===========user_defined_parameters")
+    print(user_defined_parameters)
+    print("===========user_defined_parameters")
+
     # 根据不同的模型, 选择不同的运行方式
     # 预测模式
     if args.mode == "predict":

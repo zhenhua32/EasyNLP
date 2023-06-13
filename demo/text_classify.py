@@ -1,12 +1,14 @@
 """
 https://www.yuque.com/easyx/easynlp/rxne07
 用的数据是这里面的
+
+在当前目录下运行 python text_classify.py
 """
 
 import sys
 import os
 
-print(sys.path)
+# print(sys.path)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from easynlp.appzoo import ClassificationDataset
