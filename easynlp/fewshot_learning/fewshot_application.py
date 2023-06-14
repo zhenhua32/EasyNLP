@@ -34,6 +34,7 @@ class FewshotClassification(Application):
         super(FewshotClassification, self).__init__()
         if kwargs.get("from_config"):
             self.config = kwargs.get("from_config")
+            # 没注意到, 模型是 AutoModelForMaskedLM
             self.backbone = AutoModelForMaskedLM.from_config(self.config)
         # for pretrained model, initialize from the pretrained model
         else:
@@ -57,6 +58,7 @@ class FewshotClassification(Application):
                 cnt += 1
         if cnt > 0:
             self.tokenizer.add_tokens(["<pseudo-%d>" % i for i in range(cnt)])
+        # 根据新的词汇表大小, 调整 embedding 的大小
         self.backbone.resize_token_embeddings(len(self.tokenizer))
         print("embedding size: %d" % len(self.tokenizer))
         self.config.vocab_size = len(self.tokenizer)
@@ -156,6 +158,7 @@ class CPTClassification(FewshotClassification):
             circle_loss_config = json.loads(circle_loss_config)
         else:
             circle_loss_config = dict()
+        # 新的损失函数
         self.loss_fcn = CircleLoss(**circle_loss_config)
 
     def forward(self, inputs, do_mlm=False):
@@ -168,31 +171,69 @@ class CPTClassification(FewshotClassification):
             outputs = self.backbone(**inputs)
             return {"logits": outputs.logits}
         else:
+            """
+            cls 的结构
+            (cls): BertOnlyMLMHead(
+                (predictions): BertLMPredictionHead(
+                (transform): BertPredictionHeadTransform(
+                    (dense): Linear(in_features=768, out_features=768, bias=True)
+                    (LayerNorm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+                )
+                (decoder): Linear(in_features=768, out_features=21128, bias=True)
+                )
+            )
+            """
+            # x 的 shape 是 (batch_size, seq_len, hidden_size)
             x = self.backbone.bert(**inputs)[0]
+            # outputs 的 shape 是 (batch_size, seq_len, hidden_size)
             outputs = self.backbone.cls.predictions.transform(x)
             return {"features": outputs}
 
     def compute_loss(self, forward_outputs, label_ids):
+        """
+        forward_outputs["features"].shape 是 (batch_size, seq_len, hidden_size)
+        label_ids.shape 是 (batch_size, seq_len)
+        """
+        # 有效的特征和标签
         features = forward_outputs["features"][label_ids > 0]
         features = nn.functional.normalize(features)
+        # 每一行只有一个标签, 所以 seq_len 这个维度就消失了
         labels = label_ids[label_ids > 0]
+        # 计算损失, features 的 shape 是 (batch_size, hidden_size), labels 的 shape 是 (batch_size,)
         loss = self.loss_fcn(features, labels)
         return {"loss": loss}
 
 
 class CircleLoss(nn.Module):
+    """
+    圆形损失
+
+    CircleLoss 是一种度量学习的损失函数，它可以用于深度特征学习，特别是人脸识别等任务¹³。CircleLoss 的思想是根据每个相似度分数离最优值的远近，给予不同的优化权重，使得类内相似度最大化，类间相似度最小化¹⁴。CircleLoss 可以从一个统一的相似度对优化的角度，兼容类别标签和对标签，同时退化为 Triplet Loss 或 Softmax Loss 等常见的损失函数¹⁵。
+
+    源: 与必应的对话， 2023/6/14
+    (1) Circle Loss: 一个基于对优化的统一视角-CVPR2020 - 知乎. https://zhuanlan.zhihu.com/p/126701500.
+    (2) Circle loss思想的简单分析理解：Circle Loss: A Unified Perspective of Pair .... https://blog.csdn.net/qq_34124009/article/details/106900412.
+    (3) 度量学习DML之Circle Loss_胖胖大海的博客-CSDN博客. https://blog.csdn.net/cxx654/article/details/122158148.
+    (4) Circle Loss：从统一的相似性对的优化角度进行深度特征学习 | CVPR 2020 Oral - 知乎. https://zhuanlan.zhihu.com/p/143589143.
+    (5) Circle Loss阅读笔记 - 知乎 - 知乎专栏. https://zhuanlan.zhihu.com/p/120676832.
+    """
     def __init__(self, margin: float = 0.4, gamma: float = 64, k: float = 1, distance_function="cos") -> None:
         super(CircleLoss, self).__init__()
         self.m = margin
         self.gamma = gamma
         self.k = k
         self.soft_plus = nn.Softplus()
+        # 定义距离函数
         if distance_function == "cos":
             self.dist_fcn = lambda X: X @ X.transpose(1, 0)
         else:
             raise NotImplementedError
 
     def forward(self, features, labels):
+        """
+        features 的 shape 是 (batch_size, hidden_size)
+        labels 的 shape 是 (batch_size, )
+        """
         sim = self.dist_fcn(features).view(-1)
         mask = labels.unsqueeze(1) == labels.unsqueeze(0)
         pos = mask.triu(diagonal=1).view(-1)
