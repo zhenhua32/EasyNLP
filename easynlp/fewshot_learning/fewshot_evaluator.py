@@ -128,6 +128,7 @@ class CPTEvaluator(Evaluator):
         self.metrics = ['mlm_accuracy']
 
         anchor_args = kwargs.pop('few_shot_anchor_args', None)
+        kwargs.pop("user_defined_parameters")
         anchor_dataset = FewshotBaseDataset(
             data_file=anchor_args.tables.split(',')[0],
             pretrained_model_name_or_path=anchor_args.
