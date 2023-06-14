@@ -234,6 +234,23 @@ class CircleLoss(nn.Module):
         features 的 shape 是 (batch_size, hidden_size)
         labels 的 shape 是 (batch_size, )
         """
+        """
+        这是一段 PyTorch 代码，它的作用是计算 CircleLoss 的损失值。每一行的维度如下：
+
+        - sim = self.dist_fcn(features).view(-1)：这一行是计算特征向量之间的相似度分数，然后将其展平为一维向量。sim 的维度是 (batch_size * batch_size, )。
+        - mask = labels.unsqueeze(1) == labels.unsqueeze(0)：这一行是根据标签生成一个掩码矩阵，表示哪些样本对是同类的，哪些是异类的。mask 的维度是 (batch_size, batch_size)。
+        - pos = mask.triu(diagonal=1).view(-1)：这一行是从掩码矩阵中提取出上三角部分（不包括对角线），然后展平为一维向量。pos 表示正样本对的位置，其元素为 True 或 False。pos 的维度是 (batch_size * (batch_size - 1) / 2, )。
+        - neg = mask.logical_not().triu(diagonal=1).view(-1)：这一行是对掩码矩阵取反，然后提取出上三角部分（不包括对角线），然后展平为一维向量。neg 表示负样本对的位置，其元素为 True 或 False。neg 的维度是 (batch_size * (batch_size - 1) / 2, )。
+        - sp = sim[pos]：这一行是从相似度分数中筛选出正样本对的分数。sp 的维度是 (K, )，其中 K 是正样本对的数量。
+        - sn = sim[neg]：这一行是从相似度分数中筛选出负样本对的分数。sn 的维度是 (L, )，其中 L 是负样本对的数量。
+        - ap = (1 / self.k) * torch.clamp_min(-sp.detach() + 1 + self.m, min=0.0)：这一行是计算正样本对的权重因子，其中 self.k 是一个超参数，self.m 是一个阈值。ap 的维度和 sp 相同，即 (K, )。
+        - an = torch.clamp_min(sn.detach() + self.m, min=0.0)：这一行是计算负样本对的权重因子，其中 self.m 是一个阈值。an 的维度和 sn 相同，即 (L, )。
+        - delta_p = 1 - self.m：这一行是计算正样本对的最优值，即类内相似度的目标值。delta_p 是一个标量。
+        - delta_n = self.m：这一行是计算负样本对的最优值，即类间相似度的目标值。delta_n 是一个标量。
+        - logit_p = -ap * (sp - delta_p) * self.gamma：这一行是计算正样本对的损失项，其中 self.gamma 是一个尺度因子。logit_p 的维度和 sp 相同，即 (K, )。
+        - logit_n = an * (sn - delta_n) * self.gamma：这一行是计算负样本对的损失项，其中 self.gamma 是一个尺度因子。logit_n 的维度和 sn 相同，即 (L, )。
+        - loss = self.soft_plus(torch.logsumexp(logit_n, dim=0) + torch.logsumexp(logit_p, dim=0))：这一行是计算总的损失值，其中 self.soft_plus 是一个软化版的 ReLU 函数。loss 是一个标量。
+        """
         sim = self.dist_fcn(features).view(-1)
         mask = labels.unsqueeze(1) == labels.unsqueeze(0)
         pos = mask.triu(diagonal=1).view(-1)
