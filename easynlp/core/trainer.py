@@ -40,6 +40,7 @@ class Trainer(object):
     """
     训练器
     """
+
     def __init__(self, model, train_dataset, evaluator=None, **kwargs):
         self.args = get_args()
         # for ckbert contrast learning 对比学习

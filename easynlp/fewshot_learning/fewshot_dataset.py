@@ -229,6 +229,7 @@ class FewshotBaseDataset(BaseDataset):
         attention_mask += [self.pad_idx] * (max_seq_length - length)
         token_type_ids += [0] * (max_seq_length - length)
         mask_labels += [-100] * (max_seq_length - length)
+        # mask_labels 的 shape 是 (seq_len,)
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,

@@ -81,7 +81,7 @@ if algorithm_type == "PET":
                 + "enable_fewshot=True\t"
                 + "label_desc=好,差\t"
                 + "type=pet_fewshot\t"
-                + "pattern=text,是一条商品,label,评。"
+                + "pattern=text,是一条商品,label,评"
             ),
         ]
     )
