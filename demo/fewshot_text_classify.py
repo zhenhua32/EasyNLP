@@ -3,6 +3,8 @@
 
 wget http://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/tutorials/landing_plm/train.csv
 wget http://atp-modelzoo-sh.oss-cn-shanghai.aliyuncs.com/release/tutorials/landing_plm/dev.csv
+
+在当前目录下运行 python fewshot_text_classify.py
 """
 
 import sys

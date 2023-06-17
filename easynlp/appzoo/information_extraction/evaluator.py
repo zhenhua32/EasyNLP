@@ -26,7 +26,7 @@ def get_predict_result(batchs, probs, indices, max_seq_length):
 
     for _id, instruction, offset_mapping, prob, index in zip(batchs["id"], batchs["instruction"], batchs["offset_mapping"], probs, indices):
 
-        index_ids = torch.Tensor([i for i in range(len(index))]).long()
+        index_ids = torch.Tensor([i for i in range(len(index))]).long().to(prob.device)
         answer = []
         topk_answer_dict = dict()
         # TODO 1. 调节阈值 2. 处理输出实体重叠问题
