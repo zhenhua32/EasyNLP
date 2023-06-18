@@ -19,6 +19,7 @@ valid_file = os.path.join(script_dir, "tmp/data/dev.tsv")
 checkpoint_dir = os.path.join(script_dir, "tmp/model")
 os.makedirs(checkpoint_dir, exist_ok=True)
 model_path = r"G:\code\pretrain_model_dir\pai-bert-base-zh"
+model_path = r"G:\code\pretrain_model_dir\chinese-macbert-large"
 
 """
 python main.py \
@@ -40,6 +41,7 @@ python main.py \
 --random_seed=42
 """
 
+# TODO: 估计要调下学习率
 subprocess.run(
     [
         sys.executable,
@@ -50,7 +52,7 @@ subprocess.run(
         "--app_name=information_extraction",
         "--sequence_length=128",
         "--weight_decay=0.0",
-        "--micro_batch_size=256",
+        "--micro_batch_size=64",
         f"--checkpoint_dir={checkpoint_dir}",
         "--data_threads=0",
         f"--user_defined_parameters=pretrain_model_name_or_path={model_path}",
