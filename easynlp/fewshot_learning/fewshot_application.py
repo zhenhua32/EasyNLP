@@ -147,6 +147,128 @@ class FewshotClassification(Application):
         return model
 
 
+class FewshotMultiLayerClassification(Application):
+    """
+    多层次分类
+    """
+
+    def __init__(self, pretrained_model_name_or_path=None, user_defined_parameters=None, **kwargs):
+        super(FewshotClassification, self).__init__()
+        if kwargs.get("from_config"):
+            self.config = kwargs.get("from_config")
+            # 没注意到, 模型是 AutoModelForMaskedLM
+            self.backbone = AutoModelForMaskedLM.from_config(self.config)
+        # for pretrained model, initialize from the pretrained model
+        else:
+            self.config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+            self.backbone = AutoModelForMaskedLM.from_pretrained(pretrained_model_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
+
+        # if p-tuning, model's embeddings should be changed
+        try:
+            self.user_defined_parameters_dict = user_defined_parameters.get("app_parameters")
+        except KeyError:
+            traceback.print_exc()
+            exit(-1)
+        pattern = self.user_defined_parameters_dict.get("pattern")
+        assert pattern is not None, "You must define the pattern for PET learning"
+        pattern_list = pattern.split(",")
+        cnt = 0
+        for i in range(len(pattern_list)):
+            if pattern_list[i] == "<pseudo>":
+                pattern_list[i] = "<pseudo-%d>" % cnt
+                cnt += 1
+        if cnt > 0:
+            self.tokenizer.add_tokens(["<pseudo-%d>" % i for i in range(cnt)])
+        # 根据新的词汇表大小, 调整 embedding 的大小
+        self.backbone.resize_token_embeddings(len(self.tokenizer))
+        print("embedding size: %d" % len(self.tokenizer))
+        self.config.vocab_size = len(self.tokenizer)
+
+    def forward(self, inputs):
+        """
+        看看前向传播, 这个就是 MLM 任务, 普通的预训练模型
+        """
+        if "mask_span_indices" in inputs:
+            inputs.pop("mask_span_indices")
+        outputs = self.backbone(**inputs)
+        return {"logits": outputs.logits}
+
+    def compute_loss(self, forward_outputs, label_ids):
+        """
+        计算损失, 似乎也不用修改
+        """
+        prediction_scores = forward_outputs["logits"]
+        # logits 的 shape 是 (batch_size, seq_len, vocab_size), labels 的 shape 是 (batch_size, seq_len)
+        # 现在变成 (batch_size * seq_len, vocab_size), (batch_size * seq_len)
+        # 就是要找出概率最高的那个词, 然后计算交叉熵损失
+        masked_lm_loss = cross_entropy(prediction_scores.view(-1, self.config.vocab_size), label_ids.view(-1))
+        return {"loss": masked_lm_loss}
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        # Instantiate model
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+        model = cls(pretrained_model_name_or_path=pretrained_model_name_or_path, from_config=config, **kwargs)
+        state_dict = None
+        weights_path = os.path.join(pretrained_model_name_or_path, "pytorch_model.bin")
+        if not io.exists(weights_path):
+            return model
+        with io.open(weights_path, "rb") as f:
+            state_dict = torch.load(f, map_location="cpu")
+
+        # Load from a PyTorch state_dict
+        old_keys = []
+        new_keys = []
+        for key in state_dict.keys():
+            new_key = None
+            if "gamma" in key:
+                new_key = key.replace("gamma", "weight")
+            if "beta" in key:
+                new_key = key.replace("beta", "bias")
+            if new_key:
+                old_keys.append(key)
+                new_keys.append(new_key)
+        for old_key, new_key in zip(old_keys, new_keys):
+            state_dict[new_key] = state_dict.pop(old_key)
+
+        missing_keys = []
+        unexpected_keys = []
+        error_msgs = []
+        # copy state_dict so _load_from_state_dict can modify it
+        metadata = getattr(state_dict, "_metadata", None)
+        state_dict = state_dict.copy()
+        if metadata is not None:
+            state_dict._metadata = metadata
+
+        def load(module, prefix=""):
+            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+            module._load_from_state_dict(
+                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs
+            )
+            for name, child in module._modules.items():
+                if child is not None:
+                    load(child, prefix + name + ".")
+
+        start_prefix = ""
+        logger.info("Loading model...")
+        load(model, prefix=start_prefix)
+        logger.info("Load finished!")
+        if len(missing_keys) > 0:
+            logger.info(
+                "Weights of {} not initialized from pretrained model: {}".format(model.__class__.__name__, missing_keys)
+            )
+        if len(unexpected_keys) > 0:
+            logger.info(
+                "Weights from pretrained model not used in {}: {}".format(model.__class__.__name__, unexpected_keys)
+            )
+        if len(error_msgs) > 0:
+            raise RuntimeError(
+                "Error(s) in loading state_dict for {}:\n\t{}".format(model.__class__.__name__, "\n\t".join(error_msgs))
+            )
+        return model
+
+
 class CPTClassification(FewshotClassification):
     """An application class for supporting CPT fewshot learning."""
 
@@ -217,6 +339,7 @@ class CircleLoss(nn.Module):
     (4) Circle Loss：从统一的相似性对的优化角度进行深度特征学习 | CVPR 2020 Oral - 知乎. https://zhuanlan.zhihu.com/p/143589143.
     (5) Circle Loss阅读笔记 - 知乎 - 知乎专栏. https://zhuanlan.zhihu.com/p/120676832.
     """
+
     def __init__(self, margin: float = 0.4, gamma: float = 64, k: float = 1, distance_function="cos") -> None:
         super(CircleLoss, self).__init__()
         self.m = margin

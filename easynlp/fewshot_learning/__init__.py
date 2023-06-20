@@ -18,3 +18,14 @@ from .fewshot_dataset import FewshotBaseDataset
 from .fewshot_evaluator import CPTEvaluator, PromptEvaluator
 from .fewshot_predictor import (CPTPredictor, FewshotPyModelPredictor,
                                 PromptPredictor)
+
+
+"""
+要实现一个层次分类的, 我估计这些类都要重写一遍, 好坑. 还要改下训练器
+
+- [PaddleNLP基于ERNIR3.0文本分类: WOS数据集为例(层次分类)](https://developer.aliyun.com/article/1065692)
+- [手把手搭建一个语义检索系统](https://github.com/PaddlePaddle/PaddleNLP/tree/develop/applications/neural_search)
+- [超多数据集](https://segmentfault.com/a/1190000042487495)
+
+PaddleNLP 还是很不错的, 可以看看.
+"""
