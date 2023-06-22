@@ -19,6 +19,7 @@ import traceback
 
 import torch
 
+# 这里非常坑, 很容易循环导入, 现在的做法是不直接导入这个目录下的, 而是从 appzoo 导入
 from easynlp.appzoo.dataset import BaseDataset
 from easynlp.modelzoo import AutoTokenizer
 from easynlp.utils import io
@@ -71,7 +72,7 @@ class FewshotBaseDataset(BaseDataset):
         label_name=None,
         second_sequence=None,
         label_enumerate_values=None,
-        **kwargs
+        **kwargs,
     ):
         super(FewshotBaseDataset, self).__init__(data_file, input_schema=input_schema, output_format="dict", **kwargs)
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
@@ -246,7 +247,7 @@ class FewshotBaseDataset(BaseDataset):
 
 class FewshotMultiLayerBaseDataset(BaseDataset):
     """
-    多层次分类. TODO: 需要改很多地方
+    多层次分类. 先把这个完成
 
     Args:
         pretrained_model_name_or_path:
@@ -271,28 +272,36 @@ class FewshotMultiLayerBaseDataset(BaseDataset):
 
     def __init__(
         self,
-        pretrained_model_name_or_path,
-        data_file,
-        max_seq_length,
-        first_sequence,
-        input_schema=None,
-        user_defined_parameters=None,
-        label_name=None,
-        second_sequence=None,
-        label_enumerate_values=None,
-        **kwargs
+        pretrained_model_name_or_path: str,
+        data_file: str,
+        max_seq_length: int,
+        first_sequence: str,
+        input_schema: str = None,
+        user_defined_parameters: dict = None,
+        label_name: str = None,
+        second_sequence: str = None,
+        label_enumerate_values: str = None,
+        layer_num: int = 2,
+        **kwargs,
     ):
-        super(FewshotBaseDataset, self).__init__(data_file, input_schema=input_schema, output_format="dict", **kwargs)
+        """
+        输入参数都是 str 或者 int, 便于使用 argparse, 而不是直接用 list
+        """
+        super().__init__(data_file, input_schema=input_schema, output_format="dict", **kwargs)
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
         self.max_seq_length = max_seq_length
-        if label_enumerate_values is None:
-            self._label_enumerate_values = "0,1".split(",")
-        else:
-            if io.exists(label_enumerate_values):
-                with io.open(label_enumerate_values) as f:
-                    self._label_enumerate_values = [line.strip() for line in f]
-            else:
-                self._label_enumerate_values = label_enumerate_values.split(",")
+
+        self.layer_num = layer_num
+        # 解析标签枚举值, 用 @@ 分隔层级, 用 , 分隔不同的标签
+        label_enumerate_values = label_enumerate_values.split("@@")
+        self._label_enumerate_values = []
+        for level in label_enumerate_values:
+            self._label_enumerate_values.append(level.split(","))
+        assert (
+            len(self._label_enumerate_values) == self.layer_num
+        ), f"The number of label levels should be equal to layer_num {layer_num}, get {len(self._label_enumerate_values)}"
+
+        # 解析第一和第二字段名
         assert first_sequence in self.column_names, "Column name %s needs to be included in columns" % first_sequence
         self.first_sequence = first_sequence
 
@@ -304,12 +313,12 @@ class FewshotMultiLayerBaseDataset(BaseDataset):
         else:
             self.second_sequence = None
 
-        if label_name:
-            assert label_name in self.column_names, "Column name %s needs to be included in columns" % label_name
-            self.label_name = label_name
-        else:
-            self.label_name = "label"
-            self.vocab_size = len(self.tokenizer.vocab)
+        # 解析标签名, 应该使用 , 分隔
+        self.label_names = label_name.split(",")
+        for label in self.label_names:
+            assert label in self.column_names, "Column name %s needs to be included in columns" % label
+
+        self.vocab_size = len(self.tokenizer.vocab)
         self.pad_idx = self.tokenizer.pad_token_id
         self.mask_idx = self.tokenizer.mask_token_id
 
@@ -339,23 +348,29 @@ class FewshotMultiLayerBaseDataset(BaseDataset):
             self.tokenizer.add_tokens(["<pseudo-%d>" % i for i in range(cnt)])
         # 预先分词
         self.pattern = [
-            self.tokenizer.tokenize(s) if s not in (self.first_sequence, self.second_sequence, self.label_name) else s
+            self.tokenizer.tokenize(s) if s not in (self.first_sequence, self.second_sequence, *self.label_names) else s
             for s in pattern_list
         ]
 
-        # 选哟定义每个标签的含义, TODO: 同时要求长度是一致的
+        # 选哟定义每个标签的含义, TODO: 同时要求长度是一致的. 应该用 @@ 分隔不同的层级, 用 , 分隔不同的标签
         label_desc = user_defined_parameters_dict.get("label_desc")
         if not label_desc:
             # CP-Tuning 可以不定义 label_desc
             print("Using Contrastive Few shot Learner, using random label words only as place-holders")
-            label_desc = [s[0] for s in label_enumerate_values.split(",")]
+            raise NotImplementedError("还不支持 CP-Tuning")
         else:
-            label_desc = label_desc.split(",")
-        # 计算 mask 的长度, 即 label_desc 的长度
-        self.masked_length = len(self.tokenizer.tokenize(label_desc[0]))
+            label_desc_list = label_desc.split("@@")
+            assert (
+                len(label_desc_list) == self.layer_num
+            ), f"The number of label levels should be equal to layer_num {layer_num}, get {len(label_desc_list)}"
+            label_desc_list = [x.split(",") for x in label_desc_list]
+        # 计算 mask 的长度, 即 label_desc 的长度, 是个列表. 只取第一个是因为假设同一层级下标签的长度是一样的
+        self.masked_length = [len(self.tokenizer.tokenize(x[0])) for x in label_desc_list]
         # label => label description
-        self.label_map = dict(zip(label_enumerate_values.split(","), label_desc))
-        self.num_extra_tokens = sum([len(s) if isinstance(s, list) else 0 for s in self.pattern]) + self.masked_length
+        self.label_map = [dict(zip(x, y)) for x, y in zip(self._label_enumerate_values, label_desc_list)]
+        self.num_extra_tokens = sum([len(s) if isinstance(s, list) else 0 for s in self.pattern]) + sum(
+            self.masked_length
+        )
 
     @property
     def eval_metrics(self):
@@ -363,15 +378,19 @@ class FewshotMultiLayerBaseDataset(BaseDataset):
 
     @property
     def label_enumerate_values(self):
+        # TODO: 看看这个会在哪里被使用, 现在是 list 的 list, 可能需要改变
         return self._label_enumerate_values
-
+  
     def convert_single_row_to_example(self, row):
         """Converting the examples into the dict of values.
         生成一个样本
         """
         text_a = row[self.first_sequence]
         text_b = row[self.second_sequence] if self.second_sequence else None
-        label = row[self.label_name] if self.label_name else None
+        if self.label_names:
+            label = [row[x] for x in self.label_names]
+        else:
+            label = None
         tokens_a = self.tokenizer.tokenize(text_a)
         max_seq_length = self.max_seq_length
         max_seq_length -= self.num_extra_tokens
@@ -383,37 +402,40 @@ class FewshotMultiLayerBaseDataset(BaseDataset):
             if len(tokens_a) > max_seq_length - 2:
                 tokens_a = tokens_a[: (max_seq_length - 2)]
 
-        # 获取标签
+        # 获取标签, 应该是列表
         if label is None:
-            # Prediction mode
-            label = self.tokenizer.mask_token * self.masked_length
+            label_list = [self.tokenizer.mask_token * x for x in self.masked_length]
         elif self.label_map:
-            # 将 label 转换成 label description
-            label = self.label_map[label]
+            # 将 label 转换成 label description, 每个层级的, i 是层级, j 是标签
+            label_list = [self.label_map[i][j] for i, j in enumerate(label)]
         elif label is not None:
-            assert isinstance(label, str), type(label)
+            for lab in label:
+                assert isinstance(lab, str), type(lab)
         else:
             raise ValueError("Undefined situation for label transformation")
-        label_tokens = self.tokenizer.tokenize(label)
+
+        label_tokens = [self.tokenizer.tokenize(x) for x in label_list]
         # 需要保证 label 的长度是一致的
-        assert len(label_tokens) == self.masked_length, "label length %d should be equal to the mask length %d" % (
-            len(label_tokens),
-            self.masked_length,
-        )
+        for label_token, mask_len in zip(label_tokens, self.masked_length):
+            assert len(label_token) == mask_len, "label length %d should be equal to the mask length %d" % (
+                len(label_token),
+                mask_len,
+            )
         tokens = [self.tokenizer.cls_token]
-        label_position = None
+        label_position_list = []
         for p in self.pattern:
             if p == self.first_sequence:
                 tokens += tokens_a
             elif p == self.second_sequence:
                 tokens += tokens_b if tokens_b else []
-            elif p == self.label_name:
+            elif p in self.label_names:
                 # 记录 label 的位置
                 label_position = len(tokens)
+                label_position_list.append(label_position)
                 # 将 label 替换成 mask
                 tokens += [
                     self.tokenizer.mask_token,
-                ] * self.masked_length
+                ] * self.masked_length[self.label_names.index(p)]
             elif isinstance(p, list):
                 tokens += p
             else:
@@ -421,17 +443,19 @@ class FewshotMultiLayerBaseDataset(BaseDataset):
 
         input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
         # label 对应的 token id
-        label_tokens_ids = self.tokenizer.convert_tokens_to_ids(label_tokens)
+        label_tokens_ids_list = [self.tokenizer.convert_tokens_to_ids(x) for x in label_tokens]
         length = len(input_ids)
         attention_mask = [1] * length
         token_type_ids = [0] * length
         # mask_labels 在有标签的位置上, 将 mask 替换成 label, 其他都是 -100 即 mask
         mask_labels = [-100] * length
         mask_span_indices = []
-        for i in range(self.masked_length):
-            mask_labels[label_position + i] = label_tokens_ids[i]
-            # 添加的是个数组, 套了一层
-            mask_span_indices.append([label_position + i])
+        for layer_idx, mask_len in enumerate(self.masked_length):
+            for i in range(mask_len):
+                cur_i = label_position_list[layer_idx] + i
+                mask_labels[cur_i] = label_tokens_ids_list[layer_idx][i]
+                # 添加的是个数组, 套了一层
+                mask_span_indices.append([cur_i])
         max_seq_length += self.num_extra_tokens
         # token padding
         input_ids += [self.pad_idx] * (max_seq_length - length)
