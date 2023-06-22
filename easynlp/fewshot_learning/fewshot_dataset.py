@@ -380,7 +380,7 @@ class FewshotMultiLayerBaseDataset(BaseDataset):
     def label_enumerate_values(self):
         # TODO: 看看这个会在哪里被使用, 现在是 list 的 list, 可能需要改变
         return self._label_enumerate_values
-  
+
     def convert_single_row_to_example(self, row):
         """Converting the examples into the dict of values.
         生成一个样本

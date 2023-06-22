@@ -37,8 +37,13 @@ def export_train_config(saved_path, vocab_dir, label_enumerate_values,
         train_config_dict[key] = val
 
     if isinstance(label_enumerate_values, list):
-        num_label = len(label_enumerate_values)
-        label_enumerate_values = ','.join(label_enumerate_values)
+        if isinstance(label_enumerate_values[0], list):
+            # multi-layer 多层级的标签, 用 @@ 分隔
+            num_label = sum([len(x) for x in label_enumerate_values])
+            label_enumerate_values = "@@".join([",".join(x) for x in label_enumerate_values])
+        else:
+            num_label = len(label_enumerate_values)
+            label_enumerate_values = ','.join(label_enumerate_values)
     else:
         label_enumerate_values = label_enumerate_values
         num_label = None
@@ -68,8 +73,16 @@ def export_train_config(saved_path, vocab_dir, label_enumerate_values,
 def export_label_mapping(saved_path, label_enumerate_values):
     if isinstance(label_enumerate_values, list):
         rst = dict()
-        for idx, label in enumerate(label_enumerate_values):
-            rst[label] = idx
+        if isinstance(label_enumerate_values[0], list):
+            # multi-layer 多层级的标签, 用 @@ 分隔
+            for layer_idx, labels in enumerate(label_enumerate_values):
+                temp = dict()
+                for idx, label in enumerate(labels):
+                    temp[label] = idx
+                rst['layer_{}'.format(layer_idx)] = temp
+        else:
+            for idx, label in enumerate(label_enumerate_values):
+                rst[label] = idx
         with io.open(saved_path, 'w') as f:
             json.dump(rst, f)
     else:

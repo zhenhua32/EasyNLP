@@ -149,11 +149,11 @@ class FewshotClassification(Application):
 
 class FewshotMultiLayerClassification(Application):
     """
-    多层次分类
+    多层次分类, 这个似乎就是白写, 并没有什么不同
     """
 
     def __init__(self, pretrained_model_name_or_path=None, user_defined_parameters=None, **kwargs):
-        super(FewshotClassification, self).__init__()
+        super().__init__()
         if kwargs.get("from_config"):
             self.config = kwargs.get("from_config")
             # 没注意到, 模型是 AutoModelForMaskedLM

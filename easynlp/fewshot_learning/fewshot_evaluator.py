@@ -20,7 +20,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from easynlp.core.evaluator import Evaluator
-from easynlp.fewshot_learning.fewshot_dataset import FewshotBaseDataset
+from easynlp.fewshot_learning.fewshot_dataset import FewshotBaseDataset, FewshotMultiLayerBaseDataset
 from easynlp.utils import losses
 from easynlp.utils.global_vars import parse_user_defined_parameters
 from easynlp.utils.logger import logger
@@ -145,8 +145,8 @@ class PromptMultiLayerEvaluator(Evaluator):
     An evaluator class for supporting fewshot learning (PET and P-tuning).
     """
 
-    def __init__(self, valid_dataset, **kwargs):
-        super(PromptEvaluator, self).__init__(valid_dataset, **kwargs)
+    def __init__(self, valid_dataset: FewshotMultiLayerBaseDataset, **kwargs):
+        super().__init__(valid_dataset, **kwargs)
 
         self.metrics = ["mlm_accuracy"]
 
@@ -155,7 +155,11 @@ class PromptMultiLayerEvaluator(Evaluator):
         total_loss = 0
         total_steps = 0
         total_samples = 0
-        hit_num = 0
+        # 应该变成多个标签的
+        valid_dataset: FewshotMultiLayerBaseDataset = self.valid_loader.dataset
+        layer_num = valid_dataset.layer_num
+        masked_length = valid_dataset.masked_length
+        hit_num_list = [0] * layer_num
         total_num = 0
 
         total_spent_time = 0.0
@@ -163,16 +167,10 @@ class PromptMultiLayerEvaluator(Evaluator):
         def str_to_ids(s, tokenizer):
             return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(s))
 
-        # TODO: 这里要变成多个标签的
         # 定义候选标签的 id
-        # label_candidates_ids = [
-        #     str_to_ids(v, self.valid_loader.dataset.tokenizer) for v in self.valid_loader.dataset.label_map.values()
-        # ]
         label_candidates_ids_list = []
-        for label_map in self.valid_loader.dataset.label_map_list:
-            label_candidates_ids_list.append(
-                [str_to_ids(v, self.valid_loader.dataset.tokenizer) for v in label_map.values()]
-            )
+        for label_map in valid_dataset.label_map:
+            label_candidates_ids_list.append([str_to_ids(v, valid_dataset.tokenizer) for v in label_map.values()])
 
         for _step, batch in enumerate(self.valid_loader):
             # 一个批次的数据
@@ -199,32 +197,44 @@ class PromptMultiLayerEvaluator(Evaluator):
                 indices = mask_span_indices[b]
                 # y_pred 的 shape 是 (seq_len, vocab_size)
                 y_pred = torch.nn.functional.log_softmax(_logits)
-                label = list()
-                label_prob = 0.0
-                # 可能标签上有多个词
-                for idx, span_indices in enumerate(indices):
-                    # 标签的索引
-                    span_idx = span_indices[0]
-                    label.append(_label_ids[span_idx].item())
-                    # 概率累加
-                    label_prob += y_pred[span_idx, _label_ids[span_idx].item()]
-
-                pred_correct = True
-                for l in label_candidates_ids:
-                    # TODO: 这个是什么意思, 和标签一致就跳过了
-                    if tuple(l) == tuple(label):
-                        continue
-                    pred_prob = 0.0
-                    for l_ids, span_indices in zip(l, indices):
+                # 标签有多个
+                label_list = list()
+                label_prob_list = [0.0] * layer_num
+                start = 0
+                end = 0
+                for layer_idx, mask_len in enumerate(masked_length):
+                    label_list.append(list())
+                    # 每个层级的, 所以 indices 应该只取当前的部分
+                    # 可能标签上有多个词
+                    end += mask_len
+                    for span_indices in indices[start:end]:
+                        # 标签的索引
                         span_idx = span_indices[0]
-                        pred_prob += y_pred[span_idx, l_ids]
-                    # 预测概率大于标签概率, 则预测错误, 就是不能有其他标签的概率大于正确标签的概率
-                    if pred_prob > label_prob:
-                        pred_correct = False
-                        break
-                if pred_correct:
-                    hit_num += 1
+                        label_list[layer_idx].append(_label_ids[span_idx].item())
+                        # 概率累加
+                        label_prob_list[layer_idx] += y_pred[span_idx, _label_ids[span_idx].item()]
+
+                    # 计算该层级是否预测正确
+                    pred_correct = True
+                    label_candidates_ids = label_candidates_ids_list[layer_idx]
+                    for label_candidates in label_candidates_ids:
+                        # 不用计算正确的标签, 这里主要计算其他标签的概率, 如果其他标签的概率大于正确标签的概率, 则预测错误
+                        if tuple(label_candidates) == tuple(label_list[layer_idx]):
+                            continue
+                        pred_prob = 0.0
+                        assert len(label_candidates) == len(indices[start:end])
+                        for l_ids, span_indices in zip(label_candidates, indices[start:end]):
+                            span_idx = span_indices[0]
+                            pred_prob += y_pred[span_idx, l_ids]
+                        # 预测概率大于标签概率, 则预测错误, 就是不能有其他标签的概率大于正确标签的概率
+                        if pred_prob > label_prob_list[layer_idx]:
+                            pred_correct = False
+                            break
+                    if pred_correct:
+                        hit_num_list[layer_idx] += 1
+                    start = end
                 total_num += 1
+
             # logits 的 shape 是 (batch_size * seq_len, vocab_size)
             logits = logits.view(-1, logits.size(-1))
             # label_ids 的 shape 是 (batch_size * seq_len)
@@ -254,9 +264,13 @@ class PromptMultiLayerEvaluator(Evaluator):
 
         eval_loss = total_loss / total_steps
         logger.info("Eval loss: {}".format(eval_loss))
-        acc = hit_num / total_num
-        logger.info("Accuracy: {}".format(acc))
-        eval_outputs = [("accuracy", acc)]
+        # 有多个准确率, 每个准确率对应一个层级
+        eval_outputs = []
+        logger.info("hit_num_list: {}, total_num: {}".format(hit_num_list, total_num))
+        for layer_idx, hit_num in enumerate(hit_num_list):
+            acc = hit_num / total_num
+            logger.info(f"Accuracy_{layer_idx}: {acc}")
+        eval_outputs.append((f"accuracy_{layer_idx}", acc))
 
         return eval_outputs
 
@@ -282,7 +296,7 @@ class CPTEvaluator(Evaluator):
             user_defined_parameters=parse_user_defined_parameters(anchor_args.user_defined_parameters),
             is_training=True,
             *args,
-            **kwargs
+            **kwargs,
         )
 
         assert anchor_dataset is not None, "anchor_dataset should be included for this task."

@@ -15,7 +15,7 @@
 
 from typing import TYPE_CHECKING
 from ..modelzoo.file_utils import _BaseLazyModule
-TYPE_CHECKING = True
+# TYPE_CHECKING = True  # TODO: 验证能否解决循环引用问题
 
 _import_structure = {
     "sequence_classification.model": ["SequenceClassification", "SequenceMultiLabelClassification", "DistillatorySequenceClassification", "FewshotSequenceClassification", "CptFewshotSequenceClassification"],
