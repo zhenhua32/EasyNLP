@@ -192,6 +192,7 @@ class FewshotMultiLayerClassification(Application):
         if "mask_span_indices" in inputs:
             inputs.pop("mask_span_indices")
         outputs = self.backbone(**inputs)
+        # logits 的 shape 是 (batch_size, seq_len, vocab_size)
         return {"logits": outputs.logits}
 
     def compute_loss(self, forward_outputs, label_ids):

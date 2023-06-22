@@ -18,6 +18,7 @@ import os
 import traceback
 import uuid
 from threading import Lock
+from collections import defaultdict
 
 import numpy as np
 import torch
@@ -330,6 +331,262 @@ class PromptPredictor(Predictor):
                     "predictions": new_result[0]["pred"],
                 }
             )
+        if len(new_results) == 1:
+            new_results = new_results[0]
+        return new_results
+
+
+class PromptMultiLayerPredictor(Predictor):
+    """
+    多层级的预测器
+
+    Args:
+        model_dir:
+            The path of the model
+        model_cls:
+            The classification model of the pretrained model for fewshot classification.
+        user_defined_parameters:
+            The dict of user defined parameters for fewshot prediction.
+    """
+
+    def __init__(self, model_dir, model_cls=None, user_defined_parameters=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
+        # 模型应该是通用的, 毕竟只是算一个 logits
+        self.model_predictor = FewshotPyModelPredictor(
+            saved_model_path=model_dir,
+            model_cls=model_cls,
+            user_defined_parameters=user_defined_parameters,
+            input_keys=[
+                ("input_ids", torch.LongTensor),
+                ("attention_mask", torch.LongTensor),
+                ("label_ids", torch.LongTensor),
+                ("mask_span_indices", None),
+            ],
+            output_keys=["logits"],
+        )
+        self.label_path = os.path.join(model_dir, "label_mapping.json")
+        self.MUTEX = Lock()
+        try:
+            user_defined_parameters_dict = user_defined_parameters.get("app_parameters")
+        except KeyError:
+            traceback.print_exc()
+            exit(-1)
+        pattern = user_defined_parameters_dict.get("pattern")
+        label_desc: list = user_defined_parameters_dict.get("label_desc", "").split("@@")
+        label_desc = [x.split(",") for x in label_desc]
+        with io.open(self.label_path) as f:
+            # label_name = > index, 注意这里是有多个层级的
+            self.label_mapping: list = list(json.load(f).values())
+        self.label_id_to_name: list = [{idx: name for name, idx in x.items()} for x in self.label_mapping]
+        self.first_sequence = kwargs.pop("first_sequence", "first_sequence")
+        self.second_sequence = kwargs.pop("second_sequence", "second_sequence")
+        self.label_name: list = kwargs.pop("label_name", "label").split(",")
+        self.sequence_length = kwargs.pop("sequence_length", 128)
+        # label_name => label_desc
+        self.label_map: list = [dict(zip(x.keys(), y)) for x, y in zip(self.label_mapping, label_desc)]
+        self.pad_idx = self.tokenizer.pad_token_id
+        self.mask_idx = self.tokenizer.mask_token_id
+        assert pattern is not None, "You must define the pattern for PET learning"
+        pattern_list = pattern.split(",")
+        assert self.first_sequence in pattern_list and (
+            not self.second_sequence or self.second_sequence in pattern_list
+        ), "All text columns should be included in the pattern"
+
+        cnt = 0
+        for i in range(len(pattern_list)):
+            if pattern_list[i] == "<pseudo>":
+                pattern_list[i] = "<pseudo-%d>" % cnt
+                cnt += 1
+        if cnt > 0:
+            self.tokenizer.add_tokens(["<pseudo-%d>" % i for i in range(cnt)])
+        try:
+            self.MUTEX.acquire()
+            self.pattern = [
+                self.tokenizer.tokenize(s)
+                if s not in (self.first_sequence, self.second_sequence, *self.label_name)
+                else s
+                for s in pattern_list
+            ]
+        finally:
+            self.MUTEX.release()
+
+        self.masked_length = [len(self.tokenizer.tokenize(x[0])) for x in label_desc]
+        self.num_extra_tokens = sum([len(s) if isinstance(s, list) else 0 for s in self.pattern]) + sum(
+            self.masked_length
+        )
+
+        def str_to_ids(s, tokenizer):
+            return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(s))
+
+        # 候选标签 label_name => input_ids. 现在是要 kv 结构了
+        label_candidates_ids_list = []
+        for label_map in self.label_map:
+            label_candidates_ids_list.append({k: str_to_ids(v, self.tokenizer) for k, v in label_map.items()})
+        self.label_candidates_ids_list = label_candidates_ids_list
+
+    def preprocess(self, in_data):
+        """The preprocess step of model prediction.
+
+        Args:
+            in_data: the dict of input data
+
+        Returns: the dict of output tensors containing the results
+        """
+
+        if not in_data:
+            raise RuntimeError("Input data should not be None.")
+
+        if not isinstance(in_data, list):
+            in_data = [in_data]
+
+        rst = {"input_ids": [], "attention_mask": [], "token_type_ids": [], "label_ids": [], "mask_span_indices": []}
+
+        for record in in_data:
+            text_a = record[self.first_sequence]
+            text_b = record.get(self.second_sequence, None)
+            try:
+                self.MUTEX.acquire()
+                tokens_a = self.tokenizer.tokenize(text_a)
+            finally:
+                self.MUTEX.release()
+            max_seq_length = self.sequence_length
+            max_seq_length -= self.num_extra_tokens
+            tokens_b = None
+            if text_b:
+                try:
+                    self.MUTEX.acquire()
+                    tokens_b = self.tokenizer.tokenize(text_b)
+                finally:
+                    self.MUTEX.release()
+                _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - 2)
+            else:
+                if len(tokens_a) > max_seq_length - 2:
+                    tokens_a = tokens_a[: (max_seq_length - 2)]
+            # Prediction mode
+            label = self.tokenizer.mask_token * sum(self.masked_length)
+            try:
+                self.MUTEX.acquire()
+                label_tokens = self.tokenizer.tokenize(label)
+            finally:
+                self.MUTEX.release()
+            assert len(label_tokens) == sum(self.masked_length), "label length should be equal to the mask length"
+
+            # 构建输入的 tokens
+            tokens = [self.tokenizer.cls_token]
+            label_position_list = []
+            for p in self.pattern:
+                if p == self.first_sequence:
+                    tokens += tokens_a
+                elif p == self.second_sequence:
+                    tokens += tokens_b if tokens_b else []
+                elif p in self.label_name:
+                    label_position = len(tokens)
+                    label_position_list.append(label_position)
+                    tokens += label_tokens
+                elif isinstance(p, list):
+                    tokens += p
+                else:
+                    raise ValueError("Unexpected pattern---" + p)
+            try:
+                self.MUTEX.acquire()
+                input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
+            finally:
+                self.MUTEX.release()
+            length = len(input_ids)
+            attention_mask = [1] * length
+            token_type_ids = [0] * length
+            mask_labels = [-100] * length
+            mask_span_indices = []
+            for layer_idx, mask_len in enumerate(self.masked_length):
+                for i in range(mask_len):
+                    cur_i = label_position_list[layer_idx] + i
+                    # 这里设置的是 1
+                    mask_labels[cur_i] = 1
+                    mask_span_indices.append([cur_i])
+            max_seq_length += self.num_extra_tokens
+            # token padding
+            input_ids += [
+                self.pad_idx,
+            ] * (max_seq_length - length)
+            attention_mask += [
+                self.pad_idx,
+            ] * (max_seq_length - length)
+            token_type_ids += [0] * (max_seq_length - length)
+            mask_labels += [-100] * (max_seq_length - length)
+
+            rst["input_ids"].append(input_ids)
+            rst["attention_mask"].append(attention_mask)
+            rst["token_type_ids"].append(token_type_ids)
+            rst["label_ids"].append(mask_labels)
+            rst["mask_span_indices"].append(mask_span_indices)
+
+        return rst
+
+    def predict(self, in_data):
+        """The main function calling the predictor."""
+        return self.model_predictor.predict(in_data)
+
+    def postprocess(self, result):
+        """The  postprocess that converts logits to final results.
+
+        Args:
+            result: the dict of prediction results by the model
+
+        Returns: the list of the final results.
+        """
+
+        logits = result["logits"]
+        # 因为是有层级的
+        predictions = defaultdict(list)
+        label_ids = result.pop("label_ids")  # 这个其实没什么用, 应该也能从预处理中删除
+        mask_span_indices = result.pop("mask_span_indices")
+
+        for b in range(logits.shape[0]):
+            # 遍历每个样本
+            _logits = logits[b]
+            indices = mask_span_indices[b]
+            y_pred = torch.nn.functional.log_softmax(_logits, dim=-1)
+            # 有多层标签
+            start = 0
+            end = 0
+            for layer_idx, label_candidates_ids in enumerate(self.label_candidates_ids_list):
+                end += self.masked_length[layer_idx]
+                preds = []
+                # 遍历当前层的候选 label
+                for k, v in label_candidates_ids.items():
+                    # k 是 label_name, v 是 input_ids
+                    pred_prob = 0.0
+                    for l_ids, span_indices in zip(v, indices[start:end]):
+                        span_idx = span_indices[0]
+                        pred_prob += y_pred[span_idx, l_ids].item()
+                    preds.append({"pred": k, "log_probability": pred_prob})
+                preds.sort(key=lambda x: -x["log_probability"])
+                predictions[layer_idx].append(preds)
+                start = end
+
+        # 重新组织下结构
+        # new_results = list()
+        new_results = defaultdict(dict)
+        for layer_idx, preds in predictions.items():
+            # 所有样本的这个层级的预测结果
+            for b, pred in enumerate(preds):
+                new_result = list()
+                for p in pred:
+                    new_result.append(
+                        {
+                            "pred": p["pred"],
+                            "log_probability": p["log_probability"],
+                        }
+                    )
+                if layer_idx == 0:
+                    # 设置下 id
+                    new_results[b]["id"] = result["id"][b] if "id" in result else str(uuid.uuid4())
+                # 当前层的输出和预测结果
+                new_results[b][f"output_{layer_idx}"] = new_result
+                new_results[b][f"predictions_{layer_idx}"] = new_result[0]["pred"]
+
+        new_results = list(new_results.values())
         if len(new_results) == 1:
             new_results = new_results[0]
         return new_results
