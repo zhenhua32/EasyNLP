@@ -68,7 +68,7 @@ def main():
     evaluator = PromptMultiLayerEvaluator(
         valid_dataset=valid_dataset,
         user_defined_parameters=user_defined_parameters,
-        eval_batch_size=args.micro_batch_size,
+        eval_batch_size=max(args.micro_batch_size, 128),
     )
 
     trainer = Trainer(

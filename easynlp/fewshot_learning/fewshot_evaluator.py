@@ -76,7 +76,7 @@ class PromptEvaluator(Evaluator):
                 # 掩码位置, 数组的数组, 例如 [[50]] 或者 [[50],[60]]
                 indices = mask_span_indices[b]
                 # y_pred 的 shape 是 (seq_len, vocab_size)
-                y_pred = torch.nn.functional.log_softmax(_logits)
+                y_pred = torch.nn.functional.log_softmax(_logits, dim=-1)
                 label = list()
                 label_prob = 0.0
                 # 可能标签上有多个词
@@ -89,7 +89,7 @@ class PromptEvaluator(Evaluator):
 
                 pred_correct = True
                 for l in label_candidates_ids:
-                    # TODO: 这个是什么意思, 和标签一致就跳过了
+                    # 标签一致就跳过, 只计算其他标签的概率. 其他标签概率大于正确标签就是预测错误
                     if tuple(l) == tuple(label):
                         continue
                     pred_prob = 0.0
@@ -196,7 +196,7 @@ class PromptMultiLayerEvaluator(Evaluator):
                 # 掩码位置, 数组的数组, 例如 [[50]] 或者 [[50],[60]]
                 indices = mask_span_indices[b]
                 # y_pred 的 shape 是 (seq_len, vocab_size)
-                y_pred = torch.nn.functional.log_softmax(_logits)
+                y_pred = torch.nn.functional.log_softmax(_logits, dim=-1)
                 # 标签有多个
                 label_list = list()
                 label_prob_list = [0.0] * layer_num

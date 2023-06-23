@@ -303,7 +303,7 @@ class PromptPredictor(Predictor):
         for b in range(logits.shape[0]):
             _logits = logits[b]
             indices = mask_span_indices[b]
-            y_pred = torch.nn.functional.log_softmax(_logits)
+            y_pred = torch.nn.functional.log_softmax(_logits, dim=-1)
             preds = []
             for k, v in self.label_candidates_ids.items():
                 pred_prob = 0.0
