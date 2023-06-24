@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from ..utils import exporter, get_args, get_dir_name, get_pretrain_model_path, io, is_torchx_available
-from ..utils.logger import logger
+from ..utils.logger import logger, seconds_to_human
 from ..utils.statistics import Statistics
 from .optimizers import get_optimizer
 
@@ -752,6 +752,10 @@ class Trainer(object):
                 end_time = time.time()
                 # 钩子函数
                 self.after_epoch()
+                # 可读的时间
+                epoch_time = int(end_time - start_time)
+                epoch_time = seconds_to_human(epoch_time)
+                print(f"epoch: {_epoch} cost time: {epoch_time}")
         # 记录总训练时间
         print(
             "Training Time: {}, rank {}, gsteps {}".format(time.time() - self._start_time, args.rank, self._global_step)

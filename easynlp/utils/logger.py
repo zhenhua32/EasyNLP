@@ -37,11 +37,42 @@ def init_logger(log_file=None, local_rank=-1):
     logger.setLevel(logging.INFO)
 
     console_handler = logging.StreamHandler()
-    log_format = logging.Formatter('[%(asctime)s %(levelname)s] %(message)s')
+    log_format = logging.Formatter("[%(asctime)s %(levelname)s] %(message)s")
     console_handler.setFormatter(log_format)
     logger.handlers = [console_handler]
 
-    if log_file and log_file != '':
+    if log_file and log_file != "":
         file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(log_format)
         logger.addHandler(file_handler)
+
+
+def seconds_to_human(seconds):
+    """
+    ai 写的
+    """
+    # check if the input is a positive integer
+    if not isinstance(seconds, int) or seconds < 0:
+        return "Invalid input"
+
+    # define the units and their values in seconds
+    units = [("day", 86400), ("hour", 3600), ("minute", 60), ("second", 1)]
+
+    # initialize an empty list to store the output
+    output = []
+
+    # loop through the units and divide the remaining seconds by each unit value
+    for unit, value in units:
+        # if the quotient is zero, skip this unit
+        if seconds // value == 0:
+            continue
+        # otherwise, append the quotient and the unit name to the output list
+        output.append(str(seconds // value) + " " + unit)
+        # update the remaining seconds by the remainder
+        seconds = seconds % value
+
+    # join the output list with commas and "and" before the last element
+    if len(output) > 1:
+        return ", ".join(output[:-1]) + " and " + output[-1]
+    else:
+        return output[0]

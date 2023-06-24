@@ -7,6 +7,9 @@ from transformers import AutoTokenizer
 
 
 def parse_label(label_file, model_dir):
+    """
+    解析标签, 生成 label_enumerate_values 和 label_desc
+    """
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
 
     # 先解析 label
@@ -20,11 +23,10 @@ def parse_label(label_file, model_dir):
     label_desc = defaultdict(list)
     for label, label_id in label2id.items():
         label_split = label.split(">")
-        # 标签应该只放最后一层的. TODO: 同名怎么办?
+        # 当前标签的层次
         idx = len(label_split) - 1
         label_enumerate_values[idx].append(label_id)
-        # TODO: 应该用完整标签
-        # label_desc[idx].append(label_split[-1])
+        # 应该用完整标签, 但是完整的标签可能非常长, 尤其是加了 [PAD] 统一长度后
         label_desc[idx].append(label)
 
     # 其实应该还是有序的, 因为添加的时候是从左到右添加的
@@ -54,9 +56,9 @@ root_dir = os.path.dirname(cur_dir)
 sys.path.append(root_dir)
 os.environ["PYTHONPATH"] = root_dir + ";" + os.environ.get("PYTHONPATH", "")
 
-# train_file = r"G:\dataset\text_classify\网页层次分类\train.csv"
-# dev_file = r"G:\dataset\text_classify\网页层次分类\dev.csv"
-# label_file = r"G:\dataset\text_classify\网页层次分类\label.json"
+train_file = r"G:\dataset\text_classify\网页层次分类\train.csv"
+dev_file = r"G:\dataset\text_classify\网页层次分类\dev.csv"
+label_file = r"G:\dataset\text_classify\网页层次分类\label.json"
 
 # 换个数据集
 train_file = r"G:\dataset\text_classify\baidu_extract_2020\fewshot\train.csv"
@@ -78,6 +80,17 @@ label_name = "label0,label1"
 pattern = "一条,label0,label1,的新闻,text"
 
 
+# 换个只有单层的数据集, 标签之类也要一起换
+train_file = r"G:\dataset\text_classify\tnews\fewshot\train.csv"
+dev_file = r"G:\dataset\text_classify\tnews\fewshot\dev.csv"
+label_file = r"G:\dataset\text_classify\tnews\fewshot\label.json"
+
+label_enumerate_values, label_desc = parse_label(label_file, model_dir)
+input_schema = "text:str:1,label0:str:1"
+label_name = "label0"
+pattern = "一条,label0,的新闻,text"
+
+
 cmd_list = [
     sys.executable,
     os.path.join(cur_dir, "fewshot_multi_layer.py"),
@@ -90,12 +103,12 @@ cmd_list = [
     f"--label_name={label_name}",
     f"--label_enumerate_values={label_enumerate_values}",
     f"--checkpoint_dir={checkpoint_dir}",
-    "--learning_rate=3e-5",
+    "--learning_rate=1e-5",
     "--epoch_num=100",
     "--random_seed=42",
     "--save_checkpoint_steps=100",
     "--sequence_length=128",
-    "--micro_batch_size=8",
+    "--micro_batch_size=128",
     (
         "--user_defined_parameters="
         + f"pretrain_model_name_or_path={model_dir}\t"

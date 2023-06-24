@@ -44,6 +44,7 @@ def main():
         label_name=args.label_name,
         label_enumerate_values=args.label_enumerate_values,
         user_defined_parameters=user_defined_parameters,
+        layer_num=len(args.label_name.split(",")),
         is_training=True,
     )
 
@@ -57,6 +58,7 @@ def main():
         label_name=args.label_name,
         label_enumerate_values=args.label_enumerate_values,
         user_defined_parameters=user_defined_parameters,
+        layer_num=len(args.label_name.split(",")),
         is_training=False,
     )
 
