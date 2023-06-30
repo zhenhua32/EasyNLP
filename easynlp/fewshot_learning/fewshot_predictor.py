@@ -464,13 +464,13 @@ class PromptMultiLayerPredictor(Predictor):
                 if len(tokens_a) > max_seq_length - 2:
                     tokens_a = tokens_a[: (max_seq_length - 2)]
             # Prediction mode
-            label = self.tokenizer.mask_token * sum(self.masked_length)
+            label_list = [self.tokenizer.mask_token * x for x in self.masked_length]
             try:
                 self.MUTEX.acquire()
-                label_tokens = self.tokenizer.tokenize(label)
+                label_tokens = [self.tokenizer.tokenize(label) for label in label_list]
             finally:
                 self.MUTEX.release()
-            assert len(label_tokens) == sum(self.masked_length), "label length should be equal to the mask length"
+            assert sum(map(len, label_tokens)) == sum(self.masked_length), "label length should be equal to the mask length"
 
             # 构建输入的 tokens
             tokens = [self.tokenizer.cls_token]
@@ -481,9 +481,10 @@ class PromptMultiLayerPredictor(Predictor):
                 elif p == self.second_sequence:
                     tokens += tokens_b if tokens_b else []
                 elif p in self.label_name:
+                    index = self.label_name.index(p)
                     label_position = len(tokens)
                     label_position_list.append(label_position)
-                    tokens += label_tokens
+                    tokens += label_tokens[index]
                 elif isinstance(p, list):
                     tokens += p
                 else:
