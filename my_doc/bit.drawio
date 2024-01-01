@@ -1,9 +1,15 @@
-<mxfile host="app.diagrams.net" modified="2024-01-01T03:25:31.883Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0" version="22.1.16" etag="zJ-_XEuJCuBUQgyV9xh3" type="github">
+<mxfile host="app.diagrams.net" modified="2024-01-01T03:30:03.662Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0" etag="0HWZqDFx8r9RYDJ8_gyJ" version="22.1.16" type="github">
   <diagram name="第 1 页" id="QrGvFTSECBjdcH0tVZS0">
-    <mxGraphModel>
+    <mxGraphModel dx="1587" dy="665" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
+        <mxCell id="C86iXbG9Mw5eRfoUI7AA-1" value="&lt;font color=&quot;#000000&quot;&gt;表信息&lt;/font&gt;" style="html=1;shadow=0;dashed=0;shape=mxgraph.bootstrap.rrect;rSize=5;strokeColor=#999999;strokeWidth=1;fillColor=#FFFFFF;fontColor=#6C767D;whiteSpace=wrap;align=left;verticalAlign=middle;spacingLeft=10;fontSize=14;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="130" y="40" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="C86iXbG9Mw5eRfoUI7AA-2" value="CoinTemp =&amp;gt;&amp;nbsp;crawl_temp_coin&lt;span style=&quot;background-color: initial;&quot;&gt;&amp;nbsp;&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="190" width="230" height="60" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
